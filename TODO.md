@@ -1,0 +1,2 @@
+- [ ] Install Crossterm
+- [ ] Enter raw mode
