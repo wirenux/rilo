@@ -18,6 +18,7 @@ struct EditorConfig {
     cursor_x: u16,
     cursor_y: u16,
     rows: Vec<EditorRow>,
+    row_offset: u16,
 }
 
 struct EditorRow {
@@ -33,6 +34,7 @@ impl EditorConfig {
             cursor_y: 0,
             cursor_x: 0,
             rows: Vec::new(),
+            row_offset: 0,
         })
     }
 
@@ -53,7 +55,7 @@ impl EditorConfig {
                 self.cursor_x = self.cursor_x.saturating_sub(1);
             }
             KeyCode::Char('j') | KeyCode::Down => {
-                if self.cursor_y < self.terminal_rows.saturating_sub(1) {
+                if (self.cursor_y as usize) < self.rows.len() {
                     self.cursor_y += 1;
                 }
             }
@@ -69,6 +71,15 @@ impl EditorConfig {
             _ => {}
         }
     }
+
+    fn scroll(&mut self) {
+        if self.cursor_y < self.row_offset {
+            self.row_offset = self.cursor_y;
+        }
+        if self.cursor_y >= self.row_offset + self.terminal_rows {
+            self.row_offset = self.cursor_y - self.terminal_rows + 1;
+        }
+    }
 }
 
 fn clear_screen() -> io::Result<()> {
@@ -77,7 +88,8 @@ fn clear_screen() -> io::Result<()> {
 
 fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
     for y in 0..config.terminal_rows {
-        if y >= config.rows.len() as u16 {
+        let file_row = (y as usize) + (config.row_offset as usize);
+        if file_row >= config.rows.len() {
             if config.rows.is_empty() && y == config.terminal_rows / 3 {
                 let mut welcome_text = format!("Rilo editor -- version {}", RILO_VERSION);
                 let cols = config.terminal_cols as usize;
@@ -99,7 +111,7 @@ fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
                 queue!(out, Print("~"))?;
             }
         } else {
-            let line = &config.rows[y as usize].chars;
+            let line = &config.rows[file_row].chars;
             let visible: String = line.chars().take(config.terminal_cols as usize).collect();
             queue!(out, Print(visible))?;
         }
@@ -113,12 +125,18 @@ fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
     Ok(())
 }
 
-fn refresh_screen(config: &EditorConfig) -> io::Result<()> {
+fn refresh_screen(config: &mut EditorConfig) -> io::Result<()> {
+    config.scroll();
+
     let mut out = stdout().lock();
 
     queue!(out, Hide, MoveTo(0, 0))?;
     draw_rows(&mut out, config)?;
-    queue!(out, MoveTo(config.cursor_x, config.cursor_y), Show)?;
+    queue!(
+        out,
+        MoveTo(config.cursor_x, config.cursor_y - config.row_offset),
+        Show
+    )?;
 
     out.flush()?;
 
@@ -140,7 +158,7 @@ fn main() -> io::Result<()> {
 
     // main loop
     loop {
-        refresh_screen(&editor_config)?;
+        refresh_screen(&mut editor_config)?;
 
         if let Event::Key(KeyEvent {
             code,
