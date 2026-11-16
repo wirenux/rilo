@@ -1,6 +1,6 @@
 use crossterm::{
     self,
-    cursor::{position, Hide, MoveTo, Show},
+    cursor::{Hide, MoveTo, Show},
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute, queue,
     style::Print,
