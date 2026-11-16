@@ -11,6 +11,7 @@ use std::io::{stdout, Write};
 use std::{fs, io};
 
 const RILO_VERSION: &str = env!("CARGO_PKG_VERSION");
+const TAB_STOP: usize = 8;
 
 struct EditorConfig {
     terminal_cols: u16,
@@ -24,6 +25,39 @@ struct EditorConfig {
 
 struct EditorRow {
     chars: String,
+    render: String,
+}
+
+impl EditorRow {
+    fn new(chars: String) -> Self {
+        let mut row = Self {
+            chars,
+            render: String::new(),
+        };
+        row.update_render();
+        row
+    }
+
+    fn update_render(&mut self) {
+        let tab_count = self.chars.chars().filter(|&c| c == '\t').count();
+        self.render.clear();
+        self.render.reserve(self.chars.len() + tab_count * 7);
+
+        let mut idx = 0;
+        for ch in self.chars.chars() {
+            if ch == '\t' {
+                self.render.push(' ');
+                idx += 1;
+                while idx % TAB_STOP != 0 {
+                    self.render.push(' ');
+                    idx += 1;
+                }
+            } else {
+                self.render.push(ch);
+                idx += 1;
+            }
+        }
+    }
 }
 
 impl EditorConfig {
@@ -44,9 +78,7 @@ impl EditorConfig {
         let content = fs::read_to_string(path)?;
         self.rows = content
             .lines()
-            .map(|line| EditorRow {
-                chars: line.to_string(),
-            })
+            .map(|line| EditorRow::new(line.to_string()))
             .collect();
         Ok(())
     }
@@ -144,7 +176,7 @@ fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
                 queue!(out, Print("~"))?;
             }
         } else {
-            let line = &config.rows[file_row].chars;
+            let line = &config.rows[file_row].render;
             let visible: String = line
                 .chars()
                 .skip(config.col_offset as usize)
