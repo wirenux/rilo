@@ -19,6 +19,7 @@ struct EditorConfig {
     cursor_y: u16,
     rows: Vec<EditorRow>,
     row_offset: u16,
+    col_offset: u16,
 }
 
 struct EditorRow {
@@ -35,6 +36,7 @@ impl EditorConfig {
             cursor_x: 0,
             rows: Vec::new(),
             row_offset: 0,
+            col_offset: 0,
         })
     }
 
@@ -50,9 +52,19 @@ impl EditorConfig {
     }
 
     fn move_cursor(&mut self, key: KeyCode) {
+        let row = self.rows.get(self.cursor_y as usize);
         match key {
             KeyCode::Char('h') | KeyCode::Left => {
-                self.cursor_x = self.cursor_x.saturating_sub(1);
+                if self.cursor_x > 0 {
+                    self.cursor_x -= 1;
+                } else if self.cursor_y > 0 {
+                    self.cursor_y -= 1;
+                    let prev_row_len = self
+                        .rows
+                        .get(self.cursor_y as usize)
+                        .map_or(0, |r| r.chars.chars().count() as u16);
+                    self.cursor_x = prev_row_len;
+                }
             }
             KeyCode::Char('j') | KeyCode::Down => {
                 if (self.cursor_y as usize) < self.rows.len() {
@@ -63,12 +75,27 @@ impl EditorConfig {
                 self.cursor_y = self.cursor_y.saturating_sub(1);
             }
             KeyCode::Char('l') | KeyCode::Right => {
-                if self.cursor_x < self.terminal_cols.saturating_sub(1) {
-                    self.cursor_x += 1;
+                if let Some(r) = row {
+                    let row_len = r.chars.chars().count() as u16;
+                    if self.cursor_x < row_len {
+                        self.cursor_x += 1;
+                    } else if self.cursor_x == row_len
+                        && (self.cursor_y as usize) + 1 < self.rows.len()
+                    {
+                        self.cursor_y += 1;
+                        self.cursor_x = 0;
+                    }
                 }
             }
 
             _ => {}
+        }
+        let row_len = self
+            .rows
+            .get(self.cursor_y as usize)
+            .map_or(0, |r| r.chars.chars().count() as u16);
+        if self.cursor_x > row_len {
+            self.cursor_x = row_len;
         }
     }
 
@@ -78,6 +105,12 @@ impl EditorConfig {
         }
         if self.cursor_y >= self.row_offset + self.terminal_rows {
             self.row_offset = self.cursor_y - self.terminal_rows + 1;
+        }
+        if self.cursor_x < self.col_offset {
+            self.col_offset = self.cursor_x;
+        }
+        if self.cursor_x >= self.col_offset + self.terminal_cols {
+            self.col_offset = self.cursor_x - self.terminal_cols + 1;
         }
     }
 }
@@ -112,7 +145,12 @@ fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
             }
         } else {
             let line = &config.rows[file_row].chars;
-            let visible: String = line.chars().take(config.terminal_cols as usize).collect();
+            let visible: String = line
+                .chars()
+                .skip(config.col_offset as usize)
+                .take(config.terminal_cols as usize)
+                .collect();
+
             queue!(out, Print(visible))?;
         }
 
@@ -134,7 +172,10 @@ fn refresh_screen(config: &mut EditorConfig) -> io::Result<()> {
     draw_rows(&mut out, config)?;
     queue!(
         out,
-        MoveTo(config.cursor_x, config.cursor_y - config.row_offset),
+        MoveTo(
+            config.cursor_x - config.col_offset,
+            config.cursor_y - config.row_offset
+        ),
         Show
     )?;
 

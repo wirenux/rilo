@@ -1,2 +1,5 @@
-- [ ] Install Crossterm
-- [ ] Enter raw mode
+- [x] Install Crossterm
+- [x] Enter raw mode
+- [ ] Maybe change key to vim like thing
+- [ ] Rust higlighting
+- [ ] C higlighting
