@@ -17,6 +17,11 @@ struct EditorConfig {
     terminal_rows: u16,
     cursor_x: u16,
     cursor_y: u16,
+    rows: Vec<EditorRow>,
+}
+
+struct EditorRow {
+    chars: String,
 }
 
 impl EditorConfig {
@@ -27,7 +32,19 @@ impl EditorConfig {
             terminal_rows: rows,
             cursor_y: 0,
             cursor_x: 0,
+            rows: Vec::new(),
         })
+    }
+
+    fn open(&mut self, path: &str) -> io::Result<()> {
+        let content = fs::read_to_string(path)?;
+        self.rows = content
+            .lines()
+            .map(|line| EditorRow {
+                chars: line.to_string(),
+            })
+            .collect();
+        Ok(())
     }
 
     fn move_cursor(&mut self, key: KeyCode) {
@@ -60,25 +77,31 @@ fn clear_screen() -> io::Result<()> {
 
 fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
     for y in 0..config.terminal_rows {
-        if y == config.terminal_rows / 3 {
-            let mut welcome_text = format!("Rilo editor -- version {}", RILO_VERSION);
-            let cols = config.terminal_cols as usize;
+        if y >= config.rows.len() as u16 {
+            if config.rows.is_empty() && y == config.terminal_rows / 3 {
+                let mut welcome_text = format!("Rilo editor -- version {}", RILO_VERSION);
+                let cols = config.terminal_cols as usize;
 
-            welcome_text.truncate(cols);
+                welcome_text.truncate(cols);
 
-            let mut padding = (cols.saturating_sub(welcome_text.len())) / 2;
-            if padding > 0 {
+                let mut padding = (cols.saturating_sub(welcome_text.len())) / 2;
+                if padding > 0 {
+                    queue!(out, Print("~"))?;
+                    padding -= 1;
+                }
+
+                if padding > 0 {
+                    queue!(out, Print(" ".repeat(padding)))?;
+                }
+
+                queue!(out, Print(welcome_text))?;
+            } else {
                 queue!(out, Print("~"))?;
-                padding -= 1;
             }
-
-            if padding > 0 {
-                queue!(out, Print(" ".repeat(padding)))?;
-            }
-
-            queue!(out, Print(welcome_text))?;
         } else {
-            queue!(out, Print("~"))?;
+            let line = &config.rows[y as usize].chars;
+            let visible: String = line.chars().take(config.terminal_cols as usize).collect();
+            queue!(out, Print(visible))?;
         }
 
         queue!(out, Clear(ClearType::UntilNewLine))?;
@@ -106,20 +129,12 @@ fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let file_path = args.get(1);
 
+    let mut editor_config = EditorConfig::new()?;
+
     // check for file
     if let Some(path) = file_path {
-        match fs::read(path) {
-            Ok(file_bytes) => {
-                println!("Loaded {} ({} bytes)", path, file_bytes.len());
-            }
-            Err(err) => {
-                eprintln!("Error loading file '{}': {}", path, err);
-                std::process::exit(1);
-            }
-        }
+        editor_config.open(path)?;
     }
-
-    let mut editor_config = EditorConfig::new()?;
 
     enable_raw_mode()?;
 
