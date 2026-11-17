@@ -3,10 +3,10 @@ use crossterm::{
     cursor::{Hide, MoveTo, Show},
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute, queue,
-    style::Print,
+    style::{Attribute, Color, Print, SetAttribute, Stylize},
     terminal::{disable_raw_mode, enable_raw_mode, size, Clear, ClearType},
 };
-use std::env;
+use std::env::{self, current_exe};
 use std::io::{stdout, Write};
 use std::{fs, io};
 
@@ -21,6 +21,8 @@ struct EditorConfig {
     rows: Vec<EditorRow>,
     row_offset: u16,
     col_offset: u16,
+    render_x: u16,
+    filename: String,
 }
 
 struct EditorRow {
@@ -36,6 +38,20 @@ impl EditorRow {
         };
         row.update_render();
         row
+    }
+
+    fn cx_to_rx(&self, cursor_x: usize) -> usize {
+        let mut render_x: usize = 0;
+        for (i, ch) in self.chars.chars().enumerate() {
+            if i >= cursor_x {
+                break;
+            }
+            if ch == '\t' {
+                render_x += (TAB_STOP - 1) - (render_x % TAB_STOP);
+            }
+            render_x += 1;
+        }
+        render_x
     }
 
     fn update_render(&mut self) {
@@ -62,7 +78,9 @@ impl EditorRow {
 
 impl EditorConfig {
     fn new() -> io::Result<Self> {
-        let (cols, rows) = size()?;
+        let (cols, mut rows) = size()?;
+        rows = rows.saturating_sub(1);
+
         Ok(Self {
             terminal_cols: cols,
             terminal_rows: rows,
@@ -71,10 +89,14 @@ impl EditorConfig {
             rows: Vec::new(),
             row_offset: 0,
             col_offset: 0,
+            render_x: 0,
+            filename: String::new(),
         })
     }
 
     fn open(&mut self, path: &str) -> io::Result<()> {
+        self.filename = path.to_string();
+
         let content = fs::read_to_string(path)?;
         self.rows = content
             .lines()
@@ -132,17 +154,23 @@ impl EditorConfig {
     }
 
     fn scroll(&mut self) {
+        self.render_x = 0;
+        if (self.cursor_y as usize) < self.rows.len() {
+            self.render_x =
+                self.rows[self.cursor_y as usize].cx_to_rx(self.cursor_x as usize) as u16;
+        }
+
         if self.cursor_y < self.row_offset {
             self.row_offset = self.cursor_y;
         }
         if self.cursor_y >= self.row_offset + self.terminal_rows {
             self.row_offset = self.cursor_y - self.terminal_rows + 1;
         }
-        if self.cursor_x < self.col_offset {
-            self.col_offset = self.cursor_x;
+        if self.render_x < self.col_offset {
+            self.col_offset = self.render_x;
         }
-        if self.cursor_x >= self.col_offset + self.terminal_cols {
-            self.col_offset = self.cursor_x - self.terminal_cols + 1;
+        if self.render_x >= self.col_offset + self.terminal_cols {
+            self.col_offset = self.render_x - self.terminal_cols + 1;
         }
     }
 }
@@ -187,11 +215,48 @@ fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
         }
 
         queue!(out, Clear(ClearType::UntilNewLine))?;
+        queue!(out, Print("\r\n"))?;
+    }
+    Ok(())
+}
 
-        if y < config.terminal_rows - 1 {
-            queue!(out, Print("\r\n"))?;
+fn draw_status_bar(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
+    queue!(out, SetAttribute(Attribute::Reverse))?;
+
+    let filename_str: String = if config.filename.is_empty() {
+        "[No Name]".to_string()
+    } else {
+        config.filename.chars().take(64).collect()
+    };
+
+    let display_text = format!("{} - {} lines", filename_str, config.rows.len());
+    let right_display_text = format!("{}/{}", config.cursor_y + 1, config.rows.len());
+
+    let display_len = display_text.chars().count() as u16;
+    let right_len = right_display_text.chars().count() as u16;
+
+    if display_len > config.terminal_cols {
+        let truncated: String = display_text
+            .chars()
+            .take(config.terminal_cols as usize)
+            .collect();
+        queue!(out, Print(&truncated))?;
+    } else {
+        queue!(out, Print(&display_text))?;
+
+        let mut current_len = display_len;
+        while current_len < config.terminal_cols {
+            if config.terminal_cols.saturating_sub(current_len) == right_len {
+                queue!(out, Print(&right_display_text))?;
+                break;
+            } else {
+                queue!(out, Print(" "))?;
+                current_len += 1;
+            }
         }
     }
+
+    queue!(out, SetAttribute(Attribute::Reset))?;
     Ok(())
 }
 
@@ -202,10 +267,11 @@ fn refresh_screen(config: &mut EditorConfig) -> io::Result<()> {
 
     queue!(out, Hide, MoveTo(0, 0))?;
     draw_rows(&mut out, config)?;
+    draw_status_bar(&mut out, config)?;
     queue!(
         out,
         MoveTo(
-            config.cursor_x - config.col_offset,
+            config.render_x - config.col_offset,
             config.cursor_y - config.row_offset
         ),
         Show
@@ -252,15 +318,30 @@ fn main() -> io::Result<()> {
                     editor_config.cursor_x = 0;
                 }
                 KeyCode::End => {
-                    editor_config.cursor_x = editor_config.terminal_cols.saturating_sub(1);
+                    let cursor_y = editor_config.cursor_y as usize;
+                    if cursor_y < editor_config.rows.len() {
+                        editor_config.cursor_x =
+                            editor_config.rows[cursor_y].chars.chars().count() as u16;
+                    }
                 }
                 KeyCode::PageUp => {
-                    for _ in 0..editor_config.terminal_rows {
+                    editor_config.cursor_y = editor_config.row_offset;
+                    let term_rows = editor_config.terminal_rows;
+                    for _ in 0..term_rows {
                         editor_config.move_cursor(KeyCode::Up);
                     }
                 }
                 KeyCode::PageDown => {
-                    for _ in 0..editor_config.terminal_rows {
+                    let max_row = editor_config.rows.len() as u16;
+
+                    editor_config.cursor_y =
+                        editor_config.row_offset + editor_config.terminal_rows.saturating_sub(3);
+                    if editor_config.cursor_y > max_row {
+                        editor_config.cursor_y = max_row;
+                    }
+
+                    let term_rows = editor_config.terminal_rows;
+                    for _ in 0..term_rows {
                         editor_config.move_cursor(KeyCode::Down);
                     }
                 }

@@ -3,3 +3,4 @@
 - [ ] Maybe change key to vim like thing
 - [ ] Rust higlighting
 - [ ] C higlighting
+- [ ] Add better welcome message with color, github link etc...
