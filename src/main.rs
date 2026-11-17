@@ -3,12 +3,18 @@ use crossterm::{
     cursor::{Hide, MoveTo, Show},
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute, queue,
-    style::{Attribute, Color, Print, SetAttribute, Stylize},
+    style::{Attribute, Print, SetAttribute},
     terminal::{disable_raw_mode, enable_raw_mode, size, Clear, ClearType},
 };
-use std::env::{self, current_exe};
-use std::io::{stdout, Write};
+use std::{
+    env::{self},
+    time::Instant,
+};
 use std::{fs, io};
+use std::{
+    io::{stdout, Write},
+    time::Duration,
+};
 
 const RILO_VERSION: &str = env!("CARGO_PKG_VERSION");
 const TAB_STOP: usize = 8;
@@ -23,6 +29,8 @@ struct EditorConfig {
     col_offset: u16,
     render_x: u16,
     filename: String,
+    status_message: String,
+    status_message_time: Option<Instant>,
 }
 
 struct EditorRow {
@@ -79,7 +87,7 @@ impl EditorRow {
 impl EditorConfig {
     fn new() -> io::Result<Self> {
         let (cols, mut rows) = size()?;
-        rows = rows.saturating_sub(1);
+        rows = rows.saturating_sub(2);
 
         Ok(Self {
             terminal_cols: cols,
@@ -91,6 +99,8 @@ impl EditorConfig {
             col_offset: 0,
             render_x: 0,
             filename: String::new(),
+            status_message: String::new(),
+            status_message_time: None,
         })
     }
 
@@ -172,6 +182,11 @@ impl EditorConfig {
         if self.render_x >= self.col_offset + self.terminal_cols {
             self.col_offset = self.render_x - self.terminal_cols + 1;
         }
+    }
+
+    fn set_status_message(&mut self, message: &str) {
+        self.status_message = message.to_string();
+        self.status_message_time = Some(Instant::now());
     }
 }
 
@@ -257,6 +272,22 @@ fn draw_status_bar(out: &mut impl Write, config: &EditorConfig) -> io::Result<()
     }
 
     queue!(out, SetAttribute(Attribute::Reset))?;
+    queue!(out, Print("\r\n"))?;
+    Ok(())
+}
+
+fn draw_message_bar(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
+    queue!(out, Clear(ClearType::UntilNewLine))?;
+
+    if let Some(time) = config.status_message_time && time.elapsed() < Duration::from_secs(5) {
+            let message_len = config.status_message.chars().count();
+            let cols = config.terminal_cols as usize;
+            let print_len = message_len.min(cols);
+
+            let display_message: String = config.status_message.chars().take(print_len).collect();
+            queue!(out, Print(display_message))?;
+    }
+
     Ok(())
 }
 
@@ -266,8 +297,11 @@ fn refresh_screen(config: &mut EditorConfig) -> io::Result<()> {
     let mut out = stdout().lock();
 
     queue!(out, Hide, MoveTo(0, 0))?;
+
     draw_rows(&mut out, config)?;
     draw_status_bar(&mut out, config)?;
+    draw_message_bar(&mut out, config)?;
+
     queue!(
         out,
         MoveTo(
@@ -294,6 +328,8 @@ fn main() -> io::Result<()> {
     }
 
     enable_raw_mode()?;
+
+    editor_config.set_status_message("Help: Ctrl-C | Q = Quit");
 
     // main loop
     loop {
