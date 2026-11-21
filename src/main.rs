@@ -82,6 +82,13 @@ impl EditorRow {
             }
         }
     }
+
+    fn insert_char(&mut self, at: usize, c: char) {
+        let byte_idx = self.chars.char_indices().nth(at).map_or(self.chars.len(), |(idx, _)| idx);
+
+        self.chars.insert(byte_idx, c);
+        self.update_render();
+    }
 }
 
 impl EditorConfig {
@@ -187,6 +194,15 @@ impl EditorConfig {
     fn set_status_message(&mut self, message: &str) {
         self.status_message = message.to_string();
         self.status_message_time = Some(Instant::now());
+    }
+
+    fn insert_char(&mut self, c: char) {
+        if (self.cursor_y as usize) == self.rows.len() {
+            self.rows.push(EditorRow::new(String::new()));
+        }
+
+        self.rows[self.cursor_y as usize].insert_char(self.cursor_x as usize, c);
+        self.cursor_x += 1;
     }
 }
 
@@ -329,7 +345,7 @@ fn main() -> io::Result<()> {
 
     enable_raw_mode()?;
 
-    editor_config.set_status_message("Help: Ctrl-C | Q = Quit");
+    editor_config.set_status_message("Help: Ctrl-C = Quit");
 
     // main loop
     loop {
@@ -343,16 +359,17 @@ fn main() -> io::Result<()> {
         }) = event::read()?
         {
             match code {
-                KeyCode::Char('q') => break,
-                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => break,
-                KeyCode::Char('h' | 'j' | 'k' | 'l')
-                | KeyCode::Left
+                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => break, // Ctrl-C
+
+                KeyCode::Left
                 | KeyCode::Down
                 | KeyCode::Up
                 | KeyCode::Right => editor_config.move_cursor(code),
+
                 KeyCode::Home => {
                     editor_config.cursor_x = 0;
                 }
+
                 KeyCode::End => {
                     let cursor_y = editor_config.cursor_y as usize;
                     if cursor_y < editor_config.rows.len() {
@@ -360,6 +377,7 @@ fn main() -> io::Result<()> {
                             editor_config.rows[cursor_y].chars.chars().count() as u16;
                     }
                 }
+
                 KeyCode::PageUp => {
                     editor_config.cursor_y = editor_config.row_offset;
                     let term_rows = editor_config.terminal_rows;
@@ -367,6 +385,7 @@ fn main() -> io::Result<()> {
                         editor_config.move_cursor(KeyCode::Up);
                     }
                 }
+
                 KeyCode::PageDown => {
                     let max_row = editor_config.rows.len() as u16;
 
@@ -380,6 +399,16 @@ fn main() -> io::Result<()> {
                     for _ in 0..term_rows {
                         editor_config.move_cursor(KeyCode::Down);
                     }
+                }
+
+                KeyCode::Tab => editor_config.insert_char('\t'),
+
+                KeyCode::Char(c) if !modifiers.contains(KeyModifiers::CONTROL) => {
+                    editor_config.insert_char(c);
+                }
+
+                KeyCode::Backspace | KeyCode::Esc | KeyCode::Delete => {
+                    // TODO (they are not doing all the same action)
                 }
 
                 _ => {}
