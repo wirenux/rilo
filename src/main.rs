@@ -204,6 +204,39 @@ impl EditorConfig {
         self.rows[self.cursor_y as usize].insert_char(self.cursor_x as usize, c);
         self.cursor_x += 1;
     }
+
+    fn rows_to_string(&self) -> String {
+        let total_len: usize = self.rows.iter().map(|r| r.chars.len() + 1).sum();
+
+        let mut buf = String::with_capacity(total_len);
+        for row in &self.rows {
+            buf.push_str(&row.chars);
+            buf.push('\n');
+        }
+
+        buf
+    }
+
+    fn save(&mut self) -> io::Result<()> {
+        if self.filename.is_empty() {
+            self.set_status_message("No filename defined"); // TODO: Change this to a saving file dialog
+            return Ok(());
+        }
+
+        let content = self.rows_to_string();
+        let len = content.len();
+
+        match fs::write(&self.filename, content) {
+            Ok(()) => {
+                self.set_status_message(&format!("{} bytes written to disk", len));
+                Ok(())
+            }
+            Err(e) => {
+                self.set_status_message(&format!("I/O Error : {}", e));
+                Err(e)
+            }
+        }
+    }
 }
 
 fn clear_screen() -> io::Result<()> {
@@ -360,6 +393,9 @@ fn main() -> io::Result<()> {
         {
             match code {
                 KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => break, // Ctrl-C
+                KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    editor_config.save()?
+                },
 
                 KeyCode::Left
                 | KeyCode::Down

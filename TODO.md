@@ -9,6 +9,8 @@
 - [ ] Add better welcome message with color, github link etc...
 - [ ] change key to use on macos (like no page up etc... and more like a mode thing or just use `Ctrl+...` which is better ig)
 
+- [ ] Do a `// TODO` check
+
 # say in readme :
 
 func :
