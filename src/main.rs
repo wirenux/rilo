@@ -247,6 +247,32 @@ impl EditorConfig {
         self.dirty = true;
     }
 
+    fn insert_newline(&mut self) {
+        let cx = self.cursor_x as usize;
+        let cy = self.cursor_y as usize;
+
+        if cx == 0 {
+            // if cursor is at the start of a line (or the bottom ~)
+            self.rows.insert(cy, EditorRow::new(String::new()));
+        } else {
+            // if cursor at the middle of a line
+            let byte_idx = self.rows[cy]
+                .chars
+                .char_indices()
+                .nth(cx)
+                .map_or(self.rows[cy].chars.len(), |(idx, _)| idx);
+
+            let right_half = self.rows[cy].chars.split_off(byte_idx);
+            self.rows[cy].update_render();
+
+            self.rows.insert(cy + 1, EditorRow::new(right_half));
+        }
+
+        self.cursor_y += 1;
+        self.cursor_x = 0;
+        self.dirty = true;
+    }
+
     fn rows_to_string(&self) -> String {
         let total_len: usize = self.rows.iter().map(|r| r.chars.len() + 1).sum();
 
@@ -535,6 +561,10 @@ fn main() -> io::Result<()> {
                 KeyCode::Delete => {
                     editor_config.move_cursor(KeyCode::Right);
                     editor_config.del_char();
+                }
+
+                KeyCode::Enter => {
+                    editor_config.insert_newline();
                 }
 
                 KeyCode::Esc => {} // TODO
