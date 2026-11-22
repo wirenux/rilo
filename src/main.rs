@@ -327,7 +327,7 @@ impl EditorConfig {
 
         match fs::write(&self.filename, content) {
             Ok(()) => {
-                self.set_status_message(&format!("{} bytes written to disk", len));
+                self.set_status_message(&format!("Info: {} bytes written to disk", len));
                 self.dirty = false;
                 Ok(())
             }
@@ -558,6 +558,16 @@ fn draw_message_bar(out: &mut impl Write, config: &EditorConfig) -> io::Result<(
                 SetAttribute(Attribute::Reset),
                 ResetColor,
                 Print(&display_message["Info:".len()..])
+            )?;
+        } else if display_message.starts_with("Help:") {
+            queue!(
+                out,
+                SetAttribute(Attribute::Bold),
+                SetForegroundColor(Color::Cyan),
+                Print("Help:"),
+                SetAttribute(Attribute::Reset),
+                ResetColor,
+                Print(&display_message["Help:".len()..])
             )?;
         } else {
             queue!(out, Print(display_message))?;

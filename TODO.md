@@ -23,6 +23,7 @@ func :
 - maybe ? : del_char, new_line (even at the middle)
 - color
 - save as (for new file)
+- color for `Error:`, `Warning:`, `Info:`, `Help:`
 
 choice :
 
