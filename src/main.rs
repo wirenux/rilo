@@ -287,8 +287,13 @@ impl EditorConfig {
 
     fn save(&mut self) -> io::Result<()> {
         if self.filename.is_empty() {
-            self.set_status_message("No filename defined"); // TODO: Change this to a saving file dialog
-            return Ok(());
+            match self.prompt("Save as: {}")? {
+                Some(name) => self.filename = name,
+                None => {
+                    self.set_status_message("Warning: Save aborted");
+                    return Ok(());
+                }
+            }
         }
 
         let content = self.rows_to_string();
@@ -303,6 +308,51 @@ impl EditorConfig {
             Err(e) => {
                 self.set_status_message(&format!("Error: Can't save ! {}", e));
                 Err(e)
+            }
+        }
+    }
+
+    fn prompt(&mut self, prompt: &str) -> io::Result<Option<String>> {
+        let mut buf = String::new();
+
+        loop {
+            let msg = prompt.replacen("{}", &buf, 1);
+            self.set_status_message(&msg);
+
+            let message_row = self.terminal_rows + 1;
+            let prompt_col = (msg.chars().count() as u16).min(self.terminal_cols.saturating_sub(1));
+
+            refresh_screen(self, Some((prompt_col, message_row)))?;
+
+            if let Event::Key(KeyEvent {
+                code,
+                modifiers,
+                kind: KeyEventKind::Press,
+                ..
+            }) = event::read()?
+            {
+                match code {
+                    KeyCode::Enter => {
+                        if !buf.is_empty() {
+                            self.set_status_message("");
+                            return Ok(Some(buf));
+                        }
+                    }
+                    KeyCode::Esc => {
+                        self.set_status_message("");
+                        return Ok(None);
+                    }
+                    KeyCode::Backspace | KeyCode::Delete => {
+                        buf.pop();
+                    }
+                    KeyCode::Char(c)
+                        if !modifiers.intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+                            && !c.is_control() =>
+                    {
+                        buf.push(c);
+                    }
+                    _ => {}
+                }
             }
         }
     }
@@ -440,7 +490,10 @@ fn draw_message_bar(out: &mut impl Write, config: &EditorConfig) -> io::Result<(
     Ok(())
 }
 
-fn refresh_screen(config: &mut EditorConfig) -> io::Result<()> {
+fn refresh_screen(
+    config: &mut EditorConfig,
+    cursor_override: Option<(u16, u16)>,
+) -> io::Result<()> {
     config.scroll();
 
     let mut out = stdout().lock();
@@ -451,14 +504,15 @@ fn refresh_screen(config: &mut EditorConfig) -> io::Result<()> {
     draw_status_bar(&mut out, config)?;
     draw_message_bar(&mut out, config)?;
 
-    queue!(
-        out,
-        MoveTo(
-            config.render_x - config.col_offset,
-            config.cursor_y - config.row_offset
+    let (target_x, target_y) = match cursor_override {
+        Some((col, row)) => (col, row),
+        None => (
+            config.render_x.saturating_sub(config.col_offset),
+            config.cursor_y.saturating_sub(config.row_offset),
         ),
-        Show
-    )?;
+    };
+
+    queue!(out, MoveTo(target_x, target_y,), Show)?;
 
     out.flush()?;
 
@@ -484,7 +538,7 @@ fn main() -> io::Result<()> {
 
     // main loop
     loop {
-        refresh_screen(&mut editor_config)?;
+        refresh_screen(&mut editor_config, None)?;
 
         if let Event::Key(KeyEvent {
             code,
