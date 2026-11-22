@@ -10,6 +10,7 @@
     - [ ] Say that ESC in a prompt exit the prompt
 - [ ] change key to use on macos (like no page up etc... and use `Ctrl+...` which is better ig)
 - [ ] able to save as even for existing file
+- [ ] when searching search on the whole line not just the start
 
 - [ ] Do a `// TODO` check
 

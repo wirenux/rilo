@@ -20,6 +20,13 @@ const RILO_VERSION: &str = env!("CARGO_PKG_VERSION");
 const TAB_STOP: usize = 8;
 const QUIT_TIMES: u8 = 1;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum EditorHighlight {
+    Normal = 0,
+    Number,
+    Match,
+}
+
 struct EditorConfig {
     terminal_cols: u16,
     terminal_rows: u16,
@@ -41,6 +48,7 @@ struct EditorConfig {
 struct EditorRow {
     chars: String,
     render: String,
+    highlight: Vec<EditorHighlight>,
 }
 
 impl EditorRow {
@@ -48,6 +56,7 @@ impl EditorRow {
         let mut row = Self {
             chars,
             render: String::new(),
+            highlight: Vec::new(),
         };
         row.update_render();
         row
@@ -106,6 +115,8 @@ impl EditorRow {
                 idx += 1;
             }
         }
+
+        self.update_syntax();
     }
 
     fn insert_char(&mut self, at: usize, c: char) {
@@ -123,6 +134,30 @@ impl EditorRow {
         if let Some((byte_idx, _)) = self.chars.char_indices().nth(at) {
             self.chars.remove(byte_idx);
             self.update_render();
+        }
+    }
+
+    fn update_syntax(&mut self) {
+        self.highlight = vec![EditorHighlight::Normal; self.render.len()];
+
+        let mut prev_sep = true;
+
+        for (i, c) in self.render.char_indices() {
+            let prev_hl = if i > 0 {
+                self.highlight[i - 1]
+            } else {
+                EditorHighlight::Normal
+            };
+
+            if (c.is_ascii_digit() && (prev_sep || prev_hl == EditorHighlight::Number))
+                || (c == '.' && prev_hl == EditorHighlight::Number)
+            {
+                self.highlight[i] = EditorHighlight::Number;
+                prev_sep = false;
+                continue;
+            }
+
+            prev_sep = is_separator(c);
         }
     }
 }
@@ -417,16 +452,54 @@ impl EditorConfig {
                 self.last_match = Some(i);
                 self.search_direction = direction;
 
+                self.highlight_match();
+
                 return;
             }
         }
 
         self.set_status_message("Warning: No match found");
     }
+
+    fn highlight_match(&mut self) {
+        for row in &mut self.rows {
+            row.update_syntax();
+        }
+
+        if self.search_query.is_empty() {
+            return;
+        }
+
+        let Some(row_index) = self.last_match else {
+            return;
+        };
+
+        let row = &mut self.rows[row_index];
+
+        if let Some(match_index) = row.render.find(&self.search_query) {
+            let end = match_index + self.search_query.len();
+
+            for i in match_index..end {
+                row.highlight[i] = EditorHighlight::Match;
+            }
+        }
+    }
 }
 
 fn clear_screen() -> io::Result<()> {
     execute!(io::stdout(), Clear(ClearType::All), MoveTo(0, 0)) // clear screen and put cursor on the top left corner
+}
+
+fn syntax_to_color(highlight: EditorHighlight) -> Color {
+    match highlight {
+        EditorHighlight::Number => Color::Rgb {
+            r: 246,
+            g: 197,
+            b: 158,
+        },
+        EditorHighlight::Normal => Color::White,
+        EditorHighlight::Match => Color::Yellow,
+    }
 }
 
 fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
@@ -455,13 +528,24 @@ fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
             }
         } else {
             let line = &config.rows[file_row].render;
-            let visible: String = line
-                .chars()
-                .skip(config.col_offset as usize)
-                .take(config.terminal_cols as usize)
-                .collect();
+            let start = config.col_offset as usize;
+            let end = start + config.terminal_cols as usize;
 
-            queue!(out, Print(visible))?;
+            for (byte_idx, ch) in line.char_indices() {
+                if byte_idx < start {
+                    continue;
+                }
+
+                if byte_idx >= end {
+                    break;
+                }
+
+                let color = syntax_to_color(config.rows[file_row].highlight[byte_idx]);
+
+                queue!(out, SetForegroundColor(color), Print(ch))?;
+            }
+
+            queue!(out, ResetColor)?;
         }
 
         queue!(out, Clear(ClearType::UntilNewLine))?;
@@ -604,6 +688,10 @@ fn refresh_screen(
     out.flush()?;
 
     Ok(())
+}
+
+fn is_separator(c: char) -> bool {
+    c.is_whitespace() || ",.()+-/*=~%<>[];".contains(c)
 }
 
 fn main() -> io::Result<()> {
