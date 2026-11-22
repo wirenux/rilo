@@ -18,6 +18,7 @@ func :
 - status bar
 - keybinds
 - message bar with message gone after 3 sec
+- maybe ? : del_char, new_line (even at the middle)
 
 # status
 
