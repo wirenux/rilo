@@ -1,13 +1,13 @@
 - [x] Install Crossterm
 - [x] Enter raw mode
 - [x] Add the read part of the editor
-- [ ] Add the write part of the editor
-- [ ] Maybe change key to vim like thing
-    - [ ] So add mode (insert and normal)
+- [x] Add the write part of the editor
+- [ ] Add the search part of the editor
 - [ ] Rust higlighting
 - [ ] C higlighting
 - [ ] Add better welcome message with color, github link etc...
-- [ ] change key to use on macos (like no page up etc... and more like a mode thing or just use `Ctrl+...` which is better ig)
+- [ ] change key to use on macos (like no page up etc... and use `Ctrl+...` which is better ig)
+- [ ] able to save as even for existing file
 
 - [ ] Do a `// TODO` check
 
@@ -19,6 +19,8 @@ func :
 - keybinds
 - message bar with message gone after 3 sec
 - maybe ? : del_char, new_line (even at the middle)
+- color
+- save as (for new file)
 
 # status
 
