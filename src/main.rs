@@ -52,6 +52,7 @@ impl EditorRow {
 
     fn cx_to_rx(&self, cursor_x: usize) -> usize {
         let mut render_x: usize = 0;
+
         for (i, ch) in self.chars.chars().enumerate() {
             if i >= cursor_x {
                 break;
@@ -61,7 +62,26 @@ impl EditorRow {
             }
             render_x += 1;
         }
+
         render_x
+    }
+
+    fn rx_to_cx(&self, render_x: usize) -> usize {
+        let mut cursor_x = 0;
+
+        for (cx, ch) in self.chars.chars().enumerate() {
+            if ch == '\t' {
+                cursor_x += (TAB_STOP - 1) - (cursor_x % TAB_STOP);
+            }
+
+            cursor_x += 1;
+
+            if cursor_x > render_x {
+                return cx;
+            }
+        }
+
+        self.chars.chars().count()
     }
 
     fn update_render(&mut self) {
@@ -356,6 +376,26 @@ impl EditorConfig {
             }
         }
     }
+
+    fn find(&mut self) -> io::Result<()> {
+        let query = match self.prompt("Search: {}")? {
+            Some(query) => query,
+            None => return Ok(()),
+        };
+
+        for i in 0..self.rows.len() {
+            let row = &self.rows[i];
+
+            if let Some(match_index) = row.render.find(&query) {
+                self.cursor_y = i as u16;
+                self.cursor_x = row.rx_to_cx(match_index) as u16;
+
+                break;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 fn clear_screen() -> io::Result<()> {
@@ -534,7 +574,7 @@ fn main() -> io::Result<()> {
 
     enable_raw_mode()?;
 
-    editor_config.set_status_message("Help: Ctrl-C = Quit | Ctrl-S = Save");
+    editor_config.set_status_message("Help: Ctrl-C = Quit | Ctrl-S = Save | Ctrl-F = Find");
 
     // main loop
     loop {
@@ -559,6 +599,11 @@ fn main() -> io::Result<()> {
                     }
                     break;
                 }
+
+                KeyCode::Char('f') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    editor_config.find()?
+                }
+
                 KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
                     editor_config.save()?
                 }

@@ -6,6 +6,7 @@
 - [ ] Rust higlighting
 - [ ] C higlighting
 - [ ] Add better welcome message with color, github link etc...
+    - [ ] Say that ESC in a prompt exit the prompt
 - [ ] change key to use on macos (like no page up etc... and use `Ctrl+...` which is better ig)
 - [ ] able to save as even for existing file
 
