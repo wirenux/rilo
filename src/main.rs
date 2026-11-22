@@ -3,8 +3,8 @@ use crossterm::{
     cursor::{Hide, MoveTo, Show},
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute, queue,
-    style::{Attribute, Print, SetAttribute},
-    terminal::{disable_raw_mode, enable_raw_mode, size, Clear, ClearType},
+    style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
+    terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode, size},
 };
 use std::{
     env::{self},
@@ -12,12 +12,13 @@ use std::{
 };
 use std::{fs, io};
 use std::{
-    io::{stdout, Write},
+    io::{Write, stdout},
     time::Duration,
 };
 
 const RILO_VERSION: &str = env!("CARGO_PKG_VERSION");
 const TAB_STOP: usize = 8;
+const QUIT_TIMES: u8 = 1;
 
 struct EditorConfig {
     terminal_cols: u16,
@@ -31,6 +32,7 @@ struct EditorConfig {
     filename: String,
     status_message: String,
     status_message_time: Option<Instant>,
+    dirty: bool,
 }
 
 struct EditorRow {
@@ -84,10 +86,21 @@ impl EditorRow {
     }
 
     fn insert_char(&mut self, at: usize, c: char) {
-        let byte_idx = self.chars.char_indices().nth(at).map_or(self.chars.len(), |(idx, _)| idx);
+        let byte_idx = self
+            .chars
+            .char_indices()
+            .nth(at)
+            .map_or(self.chars.len(), |(idx, _)| idx);
 
         self.chars.insert(byte_idx, c);
         self.update_render();
+    }
+
+    fn del_char(&mut self, at: usize) {
+        if let Some((byte_idx, _)) = self.chars.char_indices().nth(at) {
+            self.chars.remove(byte_idx);
+            self.update_render();
+        }
     }
 }
 
@@ -108,6 +121,7 @@ impl EditorConfig {
             filename: String::new(),
             status_message: String::new(),
             status_message_time: None,
+            dirty: false,
         })
     }
 
@@ -119,6 +133,7 @@ impl EditorConfig {
             .lines()
             .map(|line| EditorRow::new(line.to_string()))
             .collect();
+        self.dirty = false;
         Ok(())
     }
 
@@ -202,7 +217,34 @@ impl EditorConfig {
         }
 
         self.rows[self.cursor_y as usize].insert_char(self.cursor_x as usize, c);
+        self.dirty = true;
         self.cursor_x += 1;
+    }
+
+    fn del_char(&mut self) {
+        let cx = self.cursor_x as usize;
+        let cy = self.cursor_y as usize;
+
+        if cy == self.rows.len() || (cx == 0 && cy == 0) {
+            return;
+        }
+
+        if cx > 0 {
+            self.rows[cy].del_char(cx - 1);
+            self.cursor_x -= 1;
+        } else {
+            let current_row = self.rows.remove(cy);
+            let prev_row = &mut self.rows[cy - 1];
+
+            self.cursor_x = prev_row.chars.chars().count() as u16;
+
+            prev_row.chars.push_str(&current_row.chars);
+            prev_row.update_render();
+
+            self.cursor_y -= 1;
+        }
+
+        self.dirty = true;
     }
 
     fn rows_to_string(&self) -> String {
@@ -229,10 +271,11 @@ impl EditorConfig {
         match fs::write(&self.filename, content) {
             Ok(()) => {
                 self.set_status_message(&format!("{} bytes written to disk", len));
+                self.dirty = false;
                 Ok(())
             }
             Err(e) => {
-                self.set_status_message(&format!("I/O Error : {}", e));
+                self.set_status_message(&format!("Error: Can't save ! {}", e));
                 Err(e)
             }
         }
@@ -293,7 +336,14 @@ fn draw_status_bar(out: &mut impl Write, config: &EditorConfig) -> io::Result<()
         config.filename.chars().take(64).collect()
     };
 
-    let display_text = format!("{} - {} lines", filename_str, config.rows.len());
+    let modified = if config.dirty { "(modified)" } else { "" };
+
+    let display_text = format!(
+        "{} - {} lines {}",
+        filename_str,
+        config.rows.len(),
+        modified
+    );
     let right_display_text = format!("{}/{}", config.cursor_y + 1, config.rows.len());
 
     let display_len = display_text.chars().count() as u16;
@@ -328,13 +378,37 @@ fn draw_status_bar(out: &mut impl Write, config: &EditorConfig) -> io::Result<()
 fn draw_message_bar(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
     queue!(out, Clear(ClearType::UntilNewLine))?;
 
-    if let Some(time) = config.status_message_time && time.elapsed() < Duration::from_secs(5) {
-            let message_len = config.status_message.chars().count();
-            let cols = config.terminal_cols as usize;
-            let print_len = message_len.min(cols);
+    if let Some(time) = config.status_message_time
+        && time.elapsed() < Duration::from_secs(3)
+    {
+        let message_len = config.status_message.chars().count();
+        let cols = config.terminal_cols as usize;
+        let print_len = message_len.min(cols);
 
-            let display_message: String = config.status_message.chars().take(print_len).collect();
+        let display_message: String = config.status_message.chars().take(print_len).collect();
+        if display_message.starts_with("Warning:") {
+            queue!(
+                out,
+                SetAttribute(Attribute::Bold),
+                SetForegroundColor(Color::Yellow),
+                Print("Warning:"),
+                SetAttribute(Attribute::Reset),
+                ResetColor,
+                Print(&display_message["Warning:".len()..])
+            )?;
+        } else if display_message.starts_with("Error:") {
+            queue!(
+                out,
+                SetAttribute(Attribute::Bold),
+                SetForegroundColor(Color::Red),
+                Print("Error:"),
+                SetAttribute(Attribute::Reset),
+                ResetColor,
+                Print(&display_message["Error:".len()..])
+            )?;
+        } else {
             queue!(out, Print(display_message))?;
+        }
     }
 
     Ok(())
@@ -371,6 +445,8 @@ fn main() -> io::Result<()> {
 
     let mut editor_config = EditorConfig::new()?;
 
+    let mut quit_times = QUIT_TIMES;
+
     // check for file
     if let Some(path) = file_path {
         editor_config.open(path)?;
@@ -378,7 +454,7 @@ fn main() -> io::Result<()> {
 
     enable_raw_mode()?;
 
-    editor_config.set_status_message("Help: Ctrl-C = Quit");
+    editor_config.set_status_message("Help: Ctrl-C = Quit | Ctrl-S = Save");
 
     // main loop
     loop {
@@ -392,15 +468,24 @@ fn main() -> io::Result<()> {
         }) = event::read()?
         {
             match code {
-                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => break, // Ctrl-C
+                KeyCode::Char('c') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    if editor_config.dirty && quit_times > 0 {
+                        editor_config.set_status_message(&format!(
+                            "Warning: File has unsaved changes. Press Ctrl-C {} more times to quit",
+                            quit_times
+                        ));
+                        quit_times -= 1;
+                        continue;
+                    }
+                    break;
+                }
                 KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
                     editor_config.save()?
-                },
+                }
 
-                KeyCode::Left
-                | KeyCode::Down
-                | KeyCode::Up
-                | KeyCode::Right => editor_config.move_cursor(code),
+                KeyCode::Left | KeyCode::Down | KeyCode::Up | KeyCode::Right => {
+                    editor_config.move_cursor(code)
+                }
 
                 KeyCode::Home => {
                     editor_config.cursor_x = 0;
@@ -443,12 +528,20 @@ fn main() -> io::Result<()> {
                     editor_config.insert_char(c);
                 }
 
-                KeyCode::Backspace | KeyCode::Esc | KeyCode::Delete => {
-                    // TODO (they are not doing all the same action)
+                KeyCode::Backspace => {
+                    editor_config.del_char();
                 }
+
+                KeyCode::Delete => {
+                    editor_config.move_cursor(KeyCode::Right);
+                    editor_config.del_char();
+                }
+
+                KeyCode::Esc => {} // TODO
 
                 _ => {}
             }
+            quit_times = QUIT_TIMES;
         }
     }
 

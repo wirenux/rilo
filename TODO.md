@@ -17,4 +17,8 @@ func :
 
 - status bar
 - keybinds
-- message bar with message gone after 5 sec
+- message bar with message gone after 3 sec
+
+# status
+
+Current step : Step 119
