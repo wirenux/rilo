@@ -2,7 +2,8 @@
 - [x] Enter raw mode
 - [x] Add the read part of the editor
 - [x] Add the write part of the editor
-- [ ] Add the search part of the editor
+- [x] Add the search part of the editor
+- [ ] Add the higlighting part of the editor
 - [ ] Rust higlighting
 - [ ] C higlighting
 - [ ] Add better welcome message with color, github link etc...
@@ -23,6 +24,12 @@ func :
 - color
 - save as (for new file)
 
+choice :
+
+- no incremental search
+
+control : (do a table)
+
 # status
 
-Current step : Step 135
+Current step : Step 142

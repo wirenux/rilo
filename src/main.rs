@@ -33,6 +33,9 @@ struct EditorConfig {
     status_message: String,
     status_message_time: Option<Instant>,
     dirty: bool,
+    search_query: String,
+    last_match: Option<usize>,
+    search_direction: i8,
 }
 
 struct EditorRow {
@@ -142,6 +145,9 @@ impl EditorConfig {
             status_message: String::new(),
             status_message_time: None,
             dirty: false,
+            search_query: String::new(),
+            last_match: None,
+            search_direction: 1,
         })
     }
 
@@ -383,18 +389,39 @@ impl EditorConfig {
             None => return Ok(()),
         };
 
-        for i in 0..self.rows.len() {
-            let row = &self.rows[i];
+        self.search_query = query;
+        self.last_match = None;
+        self.find_next(1);
 
-            if let Some(match_index) = row.render.find(&query) {
+        Ok(())
+    }
+
+    fn find_next(&mut self, direction: i8) {
+        if self.search_query.is_empty() || self.rows.is_empty() {
+            return;
+        }
+
+        let start = self.last_match.unwrap_or(0);
+
+        for step in 1..=self.rows.len() {
+            let i = if direction == 1 {
+                (start + step) % self.rows.len()
+            } else {
+                (start + self.rows.len() - (step % self.rows.len())) % self.rows.len()
+            };
+
+            if let Some(match_index) = &self.rows[i].render.find(&self.search_query) {
                 self.cursor_y = i as u16;
-                self.cursor_x = row.rx_to_cx(match_index) as u16;
+                self.cursor_x = self.rows[i].rx_to_cx(*match_index) as u16;
 
-                break;
+                self.last_match = Some(i);
+                self.search_direction = direction;
+
+                return;
             }
         }
 
-        Ok(())
+        self.set_status_message("Warning: No match found");
     }
 }
 
@@ -522,6 +549,16 @@ fn draw_message_bar(out: &mut impl Write, config: &EditorConfig) -> io::Result<(
                 ResetColor,
                 Print(&display_message["Error:".len()..])
             )?;
+        } else if display_message.starts_with("Info:") {
+            queue!(
+                out,
+                SetAttribute(Attribute::Bold),
+                SetForegroundColor(Color::Blue),
+                Print("Info:"),
+                SetAttribute(Attribute::Reset),
+                ResetColor,
+                Print(&display_message["Info:".len()..])
+            )?;
         } else {
             queue!(out, Print(display_message))?;
         }
@@ -608,8 +645,20 @@ fn main() -> io::Result<()> {
                     editor_config.save()?
                 }
 
-                KeyCode::Left | KeyCode::Down | KeyCode::Up | KeyCode::Right => {
-                    editor_config.move_cursor(code)
+                KeyCode::Right | KeyCode::Down => {
+                    if !editor_config.search_query.is_empty() {
+                        editor_config.find_next(1);
+                    } else {
+                        editor_config.move_cursor(code);
+                    }
+                }
+
+                KeyCode::Left | KeyCode::Up => {
+                    if !editor_config.search_query.is_empty() {
+                        editor_config.find_next(-1);
+                    } else {
+                        editor_config.move_cursor(code);
+                    }
                 }
 
                 KeyCode::Home => {
@@ -666,7 +715,11 @@ fn main() -> io::Result<()> {
                     editor_config.insert_newline();
                 }
 
-                KeyCode::Esc => {} // TODO
+                KeyCode::Esc => {
+                    editor_config.search_query.clear();
+                    editor_config.last_match = None;
+                    editor_config.search_direction = 1;
+                }
 
                 _ => {}
             }
