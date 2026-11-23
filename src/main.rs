@@ -22,6 +22,7 @@ const QUIT_TIMES: u8 = 1;
 
 const HL_HIGHLIGHT_NUMBER: u32 = 1 << 0;
 const HL_HIGHLIGHT_STRING: u32 = 1 << 1;
+const HL_HIGHLIGHT_PREPOC: u32 = 1 << 2;
 
 const C_HL_EXTENSION: &[&str] = &[".c", ".h", ".cpp"];
 const C_HL_KEYWORDS: &[&str] = &[
@@ -55,6 +56,7 @@ enum EditorHighlight {
     Normal = 0,
     Comment,
     MultilineComment,
+    Preproc,
     Keyword1,
     Keyword2,
     String,
@@ -106,7 +108,7 @@ const HLDB: &[EditorSyntax] = &[EditorSyntax {
     singleline_comment_start: "//",
     multiline_comment_start: "/*",
     multiline_comment_end: "*/",
-    flags: HL_HIGHLIGHT_NUMBER | HL_HIGHLIGHT_STRING,
+    flags: HL_HIGHLIGHT_NUMBER | HL_HIGHLIGHT_STRING | HL_HIGHLIGHT_PREPOC,
 }];
 
 impl EditorRow {
@@ -207,6 +209,7 @@ impl EditorRow {
 
         let highlight_numbers = (syntax.flags & HL_HIGHLIGHT_NUMBER) != 0;
         let highlight_strings = (syntax.flags & HL_HIGHLIGHT_STRING) != 0;
+        let highlight_preproc = (syntax.flags & HL_HIGHLIGHT_PREPOC) != 0;
 
         let keywords: &[&str] = syntax.keywords;
 
@@ -220,6 +223,8 @@ impl EditorRow {
         let mut prev_sep = true;
         let mut in_string: Option<u8> = None;
         let mut in_comment = self.start_in_comment;
+
+        let first_non_space = bytes.iter().position(|b| !b.is_ascii_whitespace());
 
         while i < bytes.len() {
             let c = bytes[i];
@@ -253,6 +258,37 @@ impl EditorRow {
                     in_comment = true;
                     continue;
                 }
+            }
+
+            if highlight_preproc && c == b'#' && Some(i) == first_non_space {
+                let mut end = i + 1;
+
+                while end < bytes.len() && bytes[end].is_ascii_whitespace() {
+                    end += 1;
+                }
+                while end < bytes.len() && bytes[end].is_ascii_alphabetic() {
+                    end += 1;
+                }
+
+                self.highlight[i..end].fill(EditorHighlight::Preproc);
+
+                if bytes[i + 1..end].trim_ascii() == b"include" {
+                    let mut j = end;
+                    while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    if j < bytes.len()
+                        && bytes[j] == b'<'
+                        && let Some(rel) = bytes[j..].iter().position(|&b| b == b'>')
+                    {
+                        self.highlight[j..=j + rel].fill(EditorHighlight::String);
+                        end = j + rel + 1;
+                    }
+                }
+
+                i = end;
+                prev_sep = true;
+                continue;
             }
 
             if highlight_strings {
@@ -718,8 +754,9 @@ fn syntax_to_color(highlight: EditorHighlight) -> Color {
     match highlight {
         EditorHighlight::Normal => Color::Reset, // base color
         EditorHighlight::Comment | EditorHighlight::MultilineComment => Color::Cyan,
-        EditorHighlight::Keyword1 => Color::Yellow, // control flow
-        EditorHighlight::Keyword2 => Color::Green,  // types
+        EditorHighlight::Preproc => Color::AnsiValue(81), // match vim color
+        EditorHighlight::Keyword1 => Color::Yellow,       // control flow
+        EditorHighlight::Keyword2 => Color::Green,        // types
         EditorHighlight::String => Color::Magenta,
         EditorHighlight::Number => Color::DarkMagenta,
         EditorHighlight::Match => Color::Yellow,
