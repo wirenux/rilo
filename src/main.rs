@@ -727,9 +727,28 @@ fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
                     break;
                 }
 
-                let color = syntax_to_color(config.rows[file_row].highlight[byte_idx]);
+                let highlight = config.rows[file_row].highlight[byte_idx];
 
-                queue!(out, SetForegroundColor(color), Print(ch))?;
+                if ch.is_control() {
+                    let symbol = if (ch as u32) <= 26 {
+                        (b'@' + ch as u8) as char
+                    } else {
+                        '?'
+                    };
+
+                    queue!(
+                        out,
+                        SetAttribute(Attribute::Reverse),
+                        Print(symbol),
+                        SetAttribute(Attribute::NoReverse)
+                    )?;
+                } else {
+                    queue!(
+                        out,
+                        SetForegroundColor(syntax_to_color(highlight)),
+                        Print(ch)
+                    )?;
+                }
             }
 
             queue!(out, ResetColor)?;

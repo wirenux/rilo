@@ -11,6 +11,7 @@
 - [ ] change key to use on macos (like no page up etc... and use `Ctrl+...` which is better ig)
 - [ ] able to save as even for existing file
 - [ ] when searching search on the whole line not just the start
+- [ ] add ctrl-z and ctrl-shift-z
 
 - [ ] Do a `// TODO` check
 
@@ -26,6 +27,7 @@ func :
 - save as (for new file)
 - color for `Error:`, `Warning:`, `Info:`, `Help:`
 - same color as vim
+- use `queue!()` for less/no flicker
 
 choice :
 
@@ -35,4 +37,4 @@ control : (do a table)
 
 # status
 
-Current step : Step 175
+Current step : Step 177
