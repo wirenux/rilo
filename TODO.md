@@ -12,6 +12,8 @@
 - [ ] able to save as even for existing file
 - [ ] when searching search on the whole line not just the start
 - [ ] add ctrl-z and ctrl-shift-z
+- [x] add hex in c support
+- [ ] add `#include` and `#define` c support
 
 - [ ] Do a `// TODO` check
 
@@ -28,10 +30,12 @@ func :
 - color for `Error:`, `Warning:`, `Info:`, `Help:`
 - same color as vim
 - use `queue!()` for less/no flicker
+- hex support in c
 
 choice :
 
 - no incremental search
+- hex support in c
 
 control : (do a table)
 

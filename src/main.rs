@@ -284,7 +284,9 @@ impl EditorRow {
             if highlight_numbers {
                 let is_num_char = (c.is_ascii_digit()
                     && (prev_sep || prev_hl == EditorHighlight::Number))
-                    || (c == b'.' && prev_hl == EditorHighlight::Number);
+                    || (c == b'.' && prev_hl == EditorHighlight::Number)
+                    || (prev_hl == EditorHighlight::Number
+                        && matches!(c, b'x' | b'X' | b'a'..=b'f' | b'A'..=b'F' | b'u' | b'U' | b'l' | b'L'));
 
                 if is_num_char {
                     self.highlight[i] = EditorHighlight::Number;
@@ -956,7 +958,7 @@ fn refresh_screen(
 }
 
 fn is_separator(c: char) -> bool {
-    c.is_whitespace() || ",.()+-/*=~%<>[];".contains(c)
+    c.is_whitespace() || ",.()+-/*=~%<>[];{}:&|!?#".contains(c)
 }
 
 fn main() -> io::Result<()> {
