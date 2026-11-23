@@ -26,6 +26,7 @@ const HL_HIGHLIGHT_STRING: u32 = 1 << 1;
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum EditorHighlight {
     Normal = 0,
+    Comment,
     String,
     Number,
     Match,
@@ -59,12 +60,14 @@ struct EditorRow {
 struct EditorSyntax {
     filetype: &'static str,
     filematch: &'static [&'static str],
+    singleline_comment_start: &'static str,
     flags: u32,
 }
 
 const HLDB: &[EditorSyntax] = &[EditorSyntax {
     filetype: "c",
     filematch: &[".c", ".h", ".cpp"],
+    singleline_comment_start: "//",
     flags: HL_HIGHLIGHT_NUMBER | HL_HIGHLIGHT_STRING,
 }];
 
@@ -164,6 +167,8 @@ impl EditorRow {
         let highlight_numbers = (syntax.flags & HL_HIGHLIGHT_NUMBER) != 0;
         let highlight_strings = (syntax.flags & HL_HIGHLIGHT_STRING) != 0;
 
+        let scs = syntax.singleline_comment_start.as_bytes();
+
         let bytes = self.render.as_bytes();
         let mut i = 0;
         let mut prev_sep = true;
@@ -176,6 +181,13 @@ impl EditorRow {
             } else {
                 EditorHighlight::Normal
             };
+
+            if scs.len() > 0 && in_string.is_none() {
+                if bytes[i..].starts_with(scs) {
+                    self.highlight[i..].fill(EditorHighlight::Comment);
+                    break;
+                }
+            }
 
             if highlight_strings {
                 if let Some(quote) = in_string {
@@ -595,6 +607,7 @@ fn clear_screen() -> io::Result<()> {
 fn syntax_to_color(highlight: EditorHighlight) -> Color {
     match highlight {
         EditorHighlight::Normal => Color::White,
+        EditorHighlight::Comment => Color::Cyan,
         EditorHighlight::String => Color::Magenta,
         EditorHighlight::Number => Color::DarkMagenta,
         EditorHighlight::Match => Color::Yellow,
