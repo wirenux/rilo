@@ -54,6 +54,7 @@ const C_HL_KEYWORDS: &[&str] = &[
 enum EditorHighlight {
     Normal = 0,
     Comment,
+    MultilineComment,
     Keyword1,
     Keyword2,
     String,
@@ -84,6 +85,8 @@ struct EditorRow {
     chars: String,
     render: String,
     highlight: Vec<EditorHighlight>,
+    start_in_comment: bool,
+    open_comment: bool,
 }
 
 struct EditorSyntax {
@@ -91,6 +94,8 @@ struct EditorSyntax {
     filematch: &'static [&'static str],
     keywords: &'static [&'static str],
     singleline_comment_start: &'static str,
+    multiline_comment_start: &'static str,
+    multiline_comment_end: &'static str,
     flags: u32,
 }
 
@@ -99,6 +104,8 @@ const HLDB: &[EditorSyntax] = &[EditorSyntax {
     filematch: C_HL_EXTENSION,
     keywords: C_HL_KEYWORDS,
     singleline_comment_start: "//",
+    multiline_comment_start: "/*",
+    multiline_comment_end: "*/",
     flags: HL_HIGHLIGHT_NUMBER | HL_HIGHLIGHT_STRING,
 }];
 
@@ -108,6 +115,8 @@ impl EditorRow {
             chars,
             render: String::new(),
             highlight: Vec::new(),
+            start_in_comment: false,
+            open_comment: false,
         };
         row.update_render(syntax);
         row
@@ -192,6 +201,7 @@ impl EditorRow {
         self.highlight = vec![EditorHighlight::Normal; self.render.len()];
 
         let Some(syntax) = syntax else {
+            self.open_comment = false;
             return;
         };
 
@@ -201,11 +211,15 @@ impl EditorRow {
         let keywords: &[&str] = syntax.keywords;
 
         let scs = syntax.singleline_comment_start.as_bytes();
+        let mcs = syntax.multiline_comment_start.as_bytes();
+        let mce = syntax.multiline_comment_end.as_bytes();
 
         let bytes = self.render.as_bytes();
+
         let mut i = 0;
         let mut prev_sep = true;
         let mut in_string: Option<u8> = None;
+        let mut in_comment = self.start_in_comment;
 
         while i < bytes.len() {
             let c = bytes[i];
@@ -215,9 +229,30 @@ impl EditorRow {
                 EditorHighlight::Normal
             };
 
-            if !scs.is_empty() && in_string.is_none() && bytes[i..].starts_with(scs) {
+            if !scs.is_empty() && in_string.is_none() && !in_comment && bytes[i..].starts_with(scs)
+            {
                 self.highlight[i..].fill(EditorHighlight::Comment);
                 break;
+            }
+
+            if !mcs.is_empty() && !mce.is_empty() && in_string.is_none() {
+                if in_comment {
+                    self.highlight[i] = EditorHighlight::MultilineComment;
+                    if bytes[i..].starts_with(mce) {
+                        self.highlight[i..i + mce.len()].fill(EditorHighlight::MultilineComment);
+                        i += mce.len();
+                        in_comment = false;
+                        prev_sep = true;
+                    } else {
+                        i += 1;
+                    }
+                    continue;
+                } else if bytes[i..].starts_with(mcs) {
+                    self.highlight[i..i + mcs.len()].fill(EditorHighlight::MultilineComment);
+                    i += mcs.len();
+                    in_comment = true;
+                    continue;
+                }
             }
 
             if highlight_strings {
@@ -294,6 +329,7 @@ impl EditorRow {
             prev_sep = is_separator(c as char);
             i += 1;
         }
+        self.open_comment = in_comment;
     }
 }
 
@@ -326,13 +362,16 @@ impl EditorConfig {
         self.filename = path.to_string();
 
         self.select_syntax_highlight();
-
         let content = fs::read_to_string(path)?;
+
         self.rows = content
             .lines()
             .map(|line| EditorRow::new(line.to_string(), self.syntax))
             .collect();
+
+        self.update_all_syntax();
         self.dirty = false;
+
         Ok(())
     }
 
@@ -417,6 +456,7 @@ impl EditorConfig {
 
         self.rows[self.cursor_y as usize].insert_char(self.cursor_x as usize, c, self.syntax);
         self.dirty = true;
+        self.update_all_syntax();
         self.cursor_x += 1;
     }
 
@@ -443,6 +483,7 @@ impl EditorConfig {
             self.cursor_y -= 1;
         }
 
+        self.update_all_syntax();
         self.dirty = true;
     }
 
@@ -469,6 +510,7 @@ impl EditorConfig {
                 .insert(cy + 1, EditorRow::new(right_half, self.syntax));
         }
 
+        self.update_all_syntax();
         self.cursor_y += 1;
         self.cursor_x = 0;
         self.dirty = true;
@@ -493,10 +535,7 @@ impl EditorConfig {
                     self.filename = name;
                     self.select_syntax_highlight();
 
-                    let syntax = self.syntax;
-                    for row in &mut self.rows {
-                        row.update_syntax(syntax);
-                    }
+                    self.update_all_syntax();
                 }
                 None => {
                     self.set_status_message("Warning: Save aborted");
@@ -610,9 +649,7 @@ impl EditorConfig {
     }
 
     fn highlight_match(&mut self) {
-        for row in &mut self.rows {
-            row.update_syntax(self.syntax);
-        }
+        self.update_all_syntax();
 
         if self.search_query.is_empty() {
             return;
@@ -652,13 +689,21 @@ impl EditorConfig {
                 if matched {
                     self.syntax = Some(syntax);
 
-                    for row in &mut self.rows {
-                        row.update_syntax(self.syntax);
-                    }
+                    self.update_all_syntax();
 
                     return;
                 }
             }
+        }
+    }
+
+    fn update_all_syntax(&mut self) {
+        let syntax = self.syntax;
+        let mut open = false;
+        for row in &mut self.rows {
+            row.start_in_comment = open;
+            row.update_syntax(syntax);
+            open = row.open_comment;
         }
     }
 }
@@ -670,7 +715,7 @@ fn clear_screen() -> io::Result<()> {
 fn syntax_to_color(highlight: EditorHighlight) -> Color {
     match highlight {
         EditorHighlight::Normal => Color::Reset, // base color
-        EditorHighlight::Comment => Color::Cyan,
+        EditorHighlight::Comment | EditorHighlight::MultilineComment => Color::Cyan,
         EditorHighlight::Keyword1 => Color::Yellow, // control flow
         EditorHighlight::Keyword2 => Color::Green,  // types
         EditorHighlight::String => Color::Magenta,
