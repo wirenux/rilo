@@ -655,17 +655,17 @@ impl EditorConfig {
             return;
         }
 
-        let Some(row_index) = self.last_match else {
-            return;
-        };
+        let query_len = self.search_query.len();
 
-        let row = &mut self.rows[row_index];
-
-        if let Some(match_index) = row.render.find(&self.search_query) {
-            let end = match_index + self.search_query.len();
-
-            for i in match_index..end {
-                row.highlight[i] = EditorHighlight::Match;
+        for row in &mut self.rows {
+            let mut from = 0;
+            while let Some(rel_idx) = row.render[from..].find(&self.search_query) {
+                let start = from + rel_idx;
+                let end = (start + query_len).min(row.highlight.len());
+                for i in start..end {
+                    row.highlight[i] = EditorHighlight::Match;
+                }
+                from = end;
             }
         }
     }
