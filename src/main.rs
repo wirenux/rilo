@@ -23,10 +23,39 @@ const QUIT_TIMES: u8 = 1;
 const HL_HIGHLIGHT_NUMBER: u32 = 1 << 0;
 const HL_HIGHLIGHT_STRING: u32 = 1 << 1;
 
+const C_HL_EXTENSION: &[&str] = &[".c", ".h", ".cpp"];
+const C_HL_KEYWORDS: &[&str] = &[
+    "switch",
+    "if",
+    "while",
+    "for",
+    "break",
+    "continue",
+    "return",
+    "else",
+    "struct",
+    "union",
+    "typedef",
+    "static",
+    "enum",
+    "class",
+    "case",
+    "int|",
+    "long|",
+    "double|",
+    "float|",
+    "char|",
+    "unsigned|",
+    "signed|",
+    "void|",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum EditorHighlight {
     Normal = 0,
     Comment,
+    Keyword1,
+    Keyword2,
     String,
     Number,
     Match,
@@ -60,13 +89,15 @@ struct EditorRow {
 struct EditorSyntax {
     filetype: &'static str,
     filematch: &'static [&'static str],
+    keywords: &'static [&'static str],
     singleline_comment_start: &'static str,
     flags: u32,
 }
 
 const HLDB: &[EditorSyntax] = &[EditorSyntax {
     filetype: "c",
-    filematch: &[".c", ".h", ".cpp"],
+    filematch: C_HL_EXTENSION,
+    keywords: C_HL_KEYWORDS,
     singleline_comment_start: "//",
     flags: HL_HIGHLIGHT_NUMBER | HL_HIGHLIGHT_STRING,
 }];
@@ -167,6 +198,8 @@ impl EditorRow {
         let highlight_numbers = (syntax.flags & HL_HIGHLIGHT_NUMBER) != 0;
         let highlight_strings = (syntax.flags & HL_HIGHLIGHT_STRING) != 0;
 
+        let keywords: &[&str] = syntax.keywords;
+
         let scs = syntax.singleline_comment_start.as_bytes();
 
         let bytes = self.render.as_bytes();
@@ -182,11 +215,9 @@ impl EditorRow {
                 EditorHighlight::Normal
             };
 
-            if scs.len() > 0 && in_string.is_none() {
-                if bytes[i..].starts_with(scs) {
-                    self.highlight[i..].fill(EditorHighlight::Comment);
-                    break;
-                }
+            if !scs.is_empty() && in_string.is_none() && bytes[i..].starts_with(scs) {
+                self.highlight[i..].fill(EditorHighlight::Comment);
+                break;
             }
 
             if highlight_strings {
@@ -223,6 +254,38 @@ impl EditorRow {
                 if is_num_char {
                     self.highlight[i] = EditorHighlight::Number;
                     i += 1;
+                    prev_sep = false;
+                    continue;
+                }
+            }
+
+            if prev_sep {
+                let mut matched = false;
+
+                for kw in keywords {
+                    let (word, kw2) = match kw.strip_suffix('|') {
+                        Some(w) => (w, true),
+                        None => (*kw, false),
+                    };
+                    let word = word.as_bytes();
+                    let klen = word.len();
+
+                    if bytes[i..].starts_with(word)
+                        && bytes.get(i + klen).is_none_or(|&b| is_separator(b as char))
+                    {
+                        let kind = if kw2 {
+                            EditorHighlight::Keyword2
+                        } else {
+                            EditorHighlight::Keyword1
+                        };
+                        self.highlight[i..i + klen].fill(kind);
+                        i += klen;
+                        matched = true;
+                        break;
+                    }
+                }
+
+                if matched {
                     prev_sep = false;
                     continue;
                 }
@@ -606,8 +669,10 @@ fn clear_screen() -> io::Result<()> {
 
 fn syntax_to_color(highlight: EditorHighlight) -> Color {
     match highlight {
-        EditorHighlight::Normal => Color::White,
+        EditorHighlight::Normal => Color::Reset, // base color
         EditorHighlight::Comment => Color::Cyan,
+        EditorHighlight::Keyword1 => Color::Yellow, // control flow
+        EditorHighlight::Keyword2 => Color::Green,  // types
         EditorHighlight::String => Color::Magenta,
         EditorHighlight::Number => Color::DarkMagenta,
         EditorHighlight::Match => Color::Yellow,
