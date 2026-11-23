@@ -788,11 +788,17 @@ fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
                         SetAttribute(Attribute::NoReverse)
                     )?;
                 } else {
+                    if highlight == EditorHighlight::Match {
+                        queue!(out, SetAttribute(Attribute::Reverse))?;
+                    }
                     queue!(
                         out,
                         SetForegroundColor(syntax_to_color(highlight)),
                         Print(ch)
                     )?;
+                    if highlight == EditorHighlight::Match {
+                        queue!(out, SetAttribute(Attribute::NoReverse))?;
+                    }
                 }
             }
 
@@ -1076,6 +1082,7 @@ fn main() -> io::Result<()> {
                     editor_config.search_query.clear();
                     editor_config.last_match = None;
                     editor_config.search_direction = 1;
+                    editor_config.update_all_syntax();
                 }
 
                 _ => {}
