@@ -7,12 +7,13 @@
 - [ ] Rust higlighting
 - [x] C higlighting
 - [ ] Python higlighting
-- [ ] Add better welcome message with color, github link etc...
-    - [?] Say that ESC in a prompt exit the prompt
+- [x] Add better welcome message with color, github link etc...
+    - [x] Say that ESC in a prompt exit the prompt
 - [ ] change key to use on macos (like no page up etc... and use `Ctrl+...` which is better ig)
-- [ ] able to `save as` even for existing file
+- [ ] able to `save as` even for existing file with `ctrl-shift-s`
 - [ ] when searching search on the whole line not just the start
-- [ ] add ctrl-z and ctrl-shift-z
+- [ ] add `ctrl-z` and `ctrl-shift-z` to undo and redo
+    - [ ] add something like a stack
 - [ ] add config file like `~/.rilorc`
     - [ ] open the file
     - [ ] read for `TAB_STOP=X`
@@ -24,6 +25,10 @@
 - [ ] add line number on the 1st colon only when there is text
 
 - [ ] Do a `// TODO` check
+
+- [ ] **(LAST)** change version to v1.0.0
+- [ ] **(LAST)** create a github release
+- [ ] **(LAST)** upload on `crates.io`
 
 # say in readme :
 

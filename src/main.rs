@@ -3,11 +3,15 @@ use crossterm::{
     cursor::{Hide, MoveTo, Show},
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute, queue,
-    style::{Attribute, Color, Print, ResetColor, SetAttribute, SetForegroundColor},
+    style::{
+        Attribute::{self, Reset},
+        Color, Print, ResetColor, SetAttribute, SetForegroundColor,
+    },
     terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode, size},
 };
 use std::{
     env::{self},
+    ops::RemAssign,
     time::Instant,
 };
 use std::{fs, io};
@@ -763,32 +767,106 @@ fn syntax_to_color(highlight: EditorHighlight) -> Color {
     }
 }
 
+fn welcome_lines() -> Vec<Vec<(String, Color)>> {
+    let text = Color::Reset;
+    let key = Color::Yellow;
+    let s = |t: &str, c: Color| (t.to_string(), c);
+
+    let mut lines = vec![
+        vec![s("RILO - a terminal text editor", Color::Cyan)],
+        vec![s(&format!("version {}", RILO_VERSION), text)],
+        vec![s("open source, written in Rust", text)],
+        vec![s("https://github.com/wirenux/rilo", Color::Blue)],
+        vec![],
+    ];
+
+    let keys = [
+        ("Ctrl-S", "to save"),
+        ("Ctrl-F", "to search"),
+        ("Ctrl-C", "to quit"),
+        ("Esc", "to clear search/prompt"),
+    ];
+
+    // center everything
+    let key_w = keys
+        .iter()
+        .map(|(k, _)| k.chars().count())
+        .max()
+        .unwrap_or(0);
+    let desc_w = keys
+        .iter()
+        .map(|(_, d)| d.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    for (k, d) in keys {
+        lines.push(vec![
+            s("type ", text),
+            s(&format!("{:<key_w$}", k), key),
+            s(&format!("  {:<desc_w$}", d), text),
+        ]);
+    }
+
+    lines
+}
+
+fn draw_welcome_lines(
+    out: &mut impl Write,
+    line: &[(String, Color)],
+    cols: usize,
+) -> io::Result<()> {
+    if line.is_empty() {
+        return queue!(
+            out,
+            SetForegroundColor(Color::DarkBlue),
+            Print("~"),
+            SetForegroundColor(Color::Reset)
+        );
+    }
+
+    let width: usize = line.iter().map(|(t, _)| t.chars().count()).sum();
+    let lead = cols.saturating_sub(width) / 2;
+    let mut padding = lead;
+
+    if padding > 0 {
+        queue!(
+            out,
+            SetForegroundColor(Color::DarkBlue),
+            Print("~"),
+            SetForegroundColor(Color::Reset)
+        )?;
+        padding -= 1;
+    }
+
+    if padding > 0 {
+        queue!(out, Print(" ".repeat(padding)))?;
+    }
+
+    let mut remaining = cols.saturating_sub(lead);
+    for (text, color) in line {
+        let part: String = text.chars().take(remaining).collect();
+        remaining -= part.chars().count();
+        queue!(out, SetForegroundColor(*color), Print(part))?;
+    }
+
+    queue!(out, ResetColor)
+}
+
 fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
+    let welcome = welcome_lines();
+    let n = welcome.len();
+    let cols = config.terminal_cols as usize;
+
+    let show_welcome = config.rows.is_empty() && (config.terminal_rows as usize) > n + 2;
+    let welcome_start = (config.terminal_rows as usize).saturating_sub(n) / 3;
+
     for y in 0..config.terminal_rows {
         let file_row = (y as usize) + (config.row_offset as usize);
         if file_row >= config.rows.len() {
-            if config.rows.is_empty() && y == config.terminal_rows / 3 {
-                let mut welcome_text = format!("Rilo editor -- version {}", RILO_VERSION);
-                let cols = config.terminal_cols as usize;
+            let welcome_idx = (y as usize).checked_sub(welcome_start).filter(|&k| k < n);
 
-                welcome_text.truncate(cols);
-
-                let mut padding = (cols.saturating_sub(welcome_text.len())) / 2;
-                if padding > 0 {
-                    queue!(
-                        out,
-                        SetForegroundColor(Color::DarkBlue),
-                        Print("~"),
-                        SetForegroundColor(Color::Reset)
-                    )?;
-                    padding -= 1;
-                }
-
-                if padding > 0 {
-                    queue!(out, Print(" ".repeat(padding)))?;
-                }
-
-                queue!(out, Print(welcome_text))?;
+            if show_welcome && let Some(k) = welcome_idx {
+                draw_welcome_lines(out, &welcome[k], cols)?;
             } else {
                 queue!(
                     out,
