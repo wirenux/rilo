@@ -21,10 +21,12 @@ const TAB_STOP: usize = 8;
 const QUIT_TIMES: u8 = 1;
 
 const HL_HIGHLIGHT_NUMBER: u32 = 1 << 0;
+const HL_HIGHLIGHT_STRING: u32 = 1 << 1;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum EditorHighlight {
     Normal = 0,
+    String,
     Number,
     Match,
 }
@@ -63,7 +65,7 @@ struct EditorSyntax {
 const HLDB: &[EditorSyntax] = &[EditorSyntax {
     filetype: "c",
     filematch: &[".c", ".h", ".cpp"],
-    flags: HL_HIGHLIGHT_NUMBER,
+    flags: HL_HIGHLIGHT_NUMBER | HL_HIGHLIGHT_STRING,
 }];
 
 impl EditorRow {
@@ -159,25 +161,63 @@ impl EditorRow {
             return;
         };
 
-        let mut prev_sep = true;
+        let highlight_numbers = (syntax.flags & HL_HIGHLIGHT_NUMBER) != 0;
+        let highlight_strings = (syntax.flags & HL_HIGHLIGHT_STRING) != 0;
 
-        for (i, c) in self.render.char_indices() {
+        let bytes = self.render.as_bytes();
+        let mut i = 0;
+        let mut prev_sep = true;
+        let mut in_string: Option<u8> = None;
+
+        while i < bytes.len() {
+            let c = bytes[i];
             let prev_hl = if i > 0 {
                 self.highlight[i - 1]
             } else {
                 EditorHighlight::Normal
             };
 
-            if (syntax.flags & HL_HIGHLIGHT_NUMBER) != 0
-                && ((c.is_ascii_digit() && (prev_sep || prev_hl == EditorHighlight::Number))
-                    || (c == '.' && prev_hl == EditorHighlight::Number))
-            {
-                self.highlight[i] = EditorHighlight::Number;
-                prev_sep = false;
-                continue;
+            if highlight_strings {
+                if let Some(quote) = in_string {
+                    self.highlight[i] = EditorHighlight::String;
+
+                    if c == b'\\' && i + 1 < bytes.len() {
+                        self.highlight[i + 1] = EditorHighlight::String;
+                        i += 2;
+                        continue;
+                    }
+
+                    if c == quote {
+                        in_string = None;
+                    }
+
+                    i += 1;
+                    prev_sep = true;
+                    continue;
+                } else if c == b'"' || c == b'\'' {
+                    in_string = Some(c);
+                    self.highlight[i] = EditorHighlight::String;
+                    i += 1;
+                    prev_sep = false;
+                    continue;
+                }
             }
 
-            prev_sep = is_separator(c);
+            if highlight_numbers {
+                let is_num_char = (c.is_ascii_digit()
+                    && (prev_sep || prev_hl == EditorHighlight::Number))
+                    || (c == b'.' && prev_hl == EditorHighlight::Number);
+
+                if is_num_char {
+                    self.highlight[i] = EditorHighlight::Number;
+                    i += 1;
+                    prev_sep = false;
+                    continue;
+                }
+            }
+
+            prev_sep = is_separator(c as char);
+            i += 1;
         }
     }
 }
@@ -554,12 +594,9 @@ fn clear_screen() -> io::Result<()> {
 
 fn syntax_to_color(highlight: EditorHighlight) -> Color {
     match highlight {
-        EditorHighlight::Number => Color::Rgb {
-            r: 246,
-            g: 197,
-            b: 158,
-        },
         EditorHighlight::Normal => Color::White,
+        EditorHighlight::String => Color::Magenta,
+        EditorHighlight::Number => Color::DarkMagenta,
         EditorHighlight::Match => Color::Yellow,
     }
 }
@@ -576,7 +613,12 @@ fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
 
                 let mut padding = (cols.saturating_sub(welcome_text.len())) / 2;
                 if padding > 0 {
-                    queue!(out, Print("~"))?;
+                    queue!(
+                        out,
+                        SetForegroundColor(Color::DarkBlue),
+                        Print("~"),
+                        SetForegroundColor(Color::Reset)
+                    )?;
                     padding -= 1;
                 }
 
@@ -586,7 +628,12 @@ fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
 
                 queue!(out, Print(welcome_text))?;
             } else {
-                queue!(out, Print("~"))?;
+                queue!(
+                    out,
+                    SetForegroundColor(Color::DarkBlue),
+                    Print("~"),
+                    SetForegroundColor(Color::Reset)
+                )?;
             }
         } else {
             let line = &config.rows[file_row].render;

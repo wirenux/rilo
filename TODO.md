@@ -25,6 +25,7 @@ func :
 - color
 - save as (for new file)
 - color for `Error:`, `Warning:`, `Info:`, `Help:`
+- same color as vim
 
 choice :
 
