@@ -20,6 +20,8 @@ const RILO_VERSION: &str = env!("CARGO_PKG_VERSION");
 const TAB_STOP: usize = 8;
 const QUIT_TIMES: u8 = 1;
 
+const HL_HIGHLIGHT_NUMBER: u32 = 1 << 0;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum EditorHighlight {
     Normal = 0,
@@ -43,6 +45,7 @@ struct EditorConfig {
     search_query: String,
     last_match: Option<usize>,
     search_direction: i8,
+    syntax: Option<&'static EditorSyntax>,
 }
 
 struct EditorRow {
@@ -51,14 +54,26 @@ struct EditorRow {
     highlight: Vec<EditorHighlight>,
 }
 
+struct EditorSyntax {
+    filetype: &'static str,
+    filematch: &'static [&'static str],
+    flags: u32,
+}
+
+const HLDB: &[EditorSyntax] = &[EditorSyntax {
+    filetype: "c",
+    filematch: &[".c", ".h", ".cpp"],
+    flags: HL_HIGHLIGHT_NUMBER,
+}];
+
 impl EditorRow {
-    fn new(chars: String) -> Self {
+    fn new(chars: String, syntax: Option<&EditorSyntax>) -> Self {
         let mut row = Self {
             chars,
             render: String::new(),
             highlight: Vec::new(),
         };
-        row.update_render();
+        row.update_render(syntax);
         row
     }
 
@@ -96,7 +111,7 @@ impl EditorRow {
         self.chars.chars().count()
     }
 
-    fn update_render(&mut self) {
+    fn update_render(&mut self, syntax: Option<&EditorSyntax>) {
         let tab_count = self.chars.chars().filter(|&c| c == '\t').count();
         self.render.clear();
         self.render.reserve(self.chars.len() + tab_count * 7);
@@ -116,10 +131,10 @@ impl EditorRow {
             }
         }
 
-        self.update_syntax();
+        self.update_syntax(syntax);
     }
 
-    fn insert_char(&mut self, at: usize, c: char) {
+    fn insert_char(&mut self, at: usize, c: char, syntax: Option<&EditorSyntax>) {
         let byte_idx = self
             .chars
             .char_indices()
@@ -127,18 +142,22 @@ impl EditorRow {
             .map_or(self.chars.len(), |(idx, _)| idx);
 
         self.chars.insert(byte_idx, c);
-        self.update_render();
+        self.update_render(syntax);
     }
 
-    fn del_char(&mut self, at: usize) {
+    fn del_char(&mut self, at: usize, syntax: Option<&EditorSyntax>) {
         if let Some((byte_idx, _)) = self.chars.char_indices().nth(at) {
             self.chars.remove(byte_idx);
-            self.update_render();
+            self.update_render(syntax);
         }
     }
 
-    fn update_syntax(&mut self) {
+    fn update_syntax(&mut self, syntax: Option<&EditorSyntax>) {
         self.highlight = vec![EditorHighlight::Normal; self.render.len()];
+
+        let Some(syntax) = syntax else {
+            return;
+        };
 
         let mut prev_sep = true;
 
@@ -149,8 +168,9 @@ impl EditorRow {
                 EditorHighlight::Normal
             };
 
-            if (c.is_ascii_digit() && (prev_sep || prev_hl == EditorHighlight::Number))
-                || (c == '.' && prev_hl == EditorHighlight::Number)
+            if (syntax.flags & HL_HIGHLIGHT_NUMBER) != 0
+                && ((c.is_ascii_digit() && (prev_sep || prev_hl == EditorHighlight::Number))
+                    || (c == '.' && prev_hl == EditorHighlight::Number))
             {
                 self.highlight[i] = EditorHighlight::Number;
                 prev_sep = false;
@@ -183,16 +203,19 @@ impl EditorConfig {
             search_query: String::new(),
             last_match: None,
             search_direction: 1,
+            syntax: None,
         })
     }
 
     fn open(&mut self, path: &str) -> io::Result<()> {
         self.filename = path.to_string();
 
+        self.select_syntax_highlight();
+
         let content = fs::read_to_string(path)?;
         self.rows = content
             .lines()
-            .map(|line| EditorRow::new(line.to_string()))
+            .map(|line| EditorRow::new(line.to_string(), self.syntax))
             .collect();
         self.dirty = false;
         Ok(())
@@ -274,10 +297,10 @@ impl EditorConfig {
 
     fn insert_char(&mut self, c: char) {
         if (self.cursor_y as usize) == self.rows.len() {
-            self.rows.push(EditorRow::new(String::new()));
+            self.rows.push(EditorRow::new(String::new(), self.syntax));
         }
 
-        self.rows[self.cursor_y as usize].insert_char(self.cursor_x as usize, c);
+        self.rows[self.cursor_y as usize].insert_char(self.cursor_x as usize, c, self.syntax);
         self.dirty = true;
         self.cursor_x += 1;
     }
@@ -291,7 +314,7 @@ impl EditorConfig {
         }
 
         if cx > 0 {
-            self.rows[cy].del_char(cx - 1);
+            self.rows[cy].del_char(cx - 1, self.syntax);
             self.cursor_x -= 1;
         } else {
             let current_row = self.rows.remove(cy);
@@ -300,7 +323,7 @@ impl EditorConfig {
             self.cursor_x = prev_row.chars.chars().count() as u16;
 
             prev_row.chars.push_str(&current_row.chars);
-            prev_row.update_render();
+            prev_row.update_render(self.syntax);
 
             self.cursor_y -= 1;
         }
@@ -314,7 +337,8 @@ impl EditorConfig {
 
         if cx == 0 {
             // if cursor is at the start of a line (or the bottom ~)
-            self.rows.insert(cy, EditorRow::new(String::new()));
+            self.rows
+                .insert(cy, EditorRow::new(String::new(), self.syntax));
         } else {
             // if cursor at the middle of a line
             let byte_idx = self.rows[cy]
@@ -324,9 +348,10 @@ impl EditorConfig {
                 .map_or(self.rows[cy].chars.len(), |(idx, _)| idx);
 
             let right_half = self.rows[cy].chars.split_off(byte_idx);
-            self.rows[cy].update_render();
+            self.rows[cy].update_render(self.syntax);
 
-            self.rows.insert(cy + 1, EditorRow::new(right_half));
+            self.rows
+                .insert(cy + 1, EditorRow::new(right_half, self.syntax));
         }
 
         self.cursor_y += 1;
@@ -349,7 +374,15 @@ impl EditorConfig {
     fn save(&mut self) -> io::Result<()> {
         if self.filename.is_empty() {
             match self.prompt("Save as: {}")? {
-                Some(name) => self.filename = name,
+                Some(name) => {
+                    self.filename = name;
+                    self.select_syntax_highlight();
+
+                    let syntax = self.syntax;
+                    for row in &mut self.rows {
+                        row.update_syntax(syntax);
+                    }
+                }
                 None => {
                     self.set_status_message("Warning: Save aborted");
                     return Ok(());
@@ -463,7 +496,7 @@ impl EditorConfig {
 
     fn highlight_match(&mut self) {
         for row in &mut self.rows {
-            row.update_syntax();
+            row.update_syntax(self.syntax);
         }
 
         if self.search_query.is_empty() {
@@ -481,6 +514,35 @@ impl EditorConfig {
 
             for i in match_index..end {
                 row.highlight[i] = EditorHighlight::Match;
+            }
+        }
+    }
+
+    fn select_syntax_highlight(&mut self) {
+        self.syntax = None;
+        if self.filename.is_empty() {
+            return;
+        }
+
+        let ext = self.filename.rsplit_once('.').map(|(_, after)| after);
+
+        for syntax in HLDB {
+            for pattern in syntax.filematch {
+                let matched = if let Some(pat_ext) = pattern.strip_prefix('.') {
+                    ext == Some(pat_ext)
+                } else {
+                    self.filename.contains(pattern)
+                };
+
+                if matched {
+                    self.syntax = Some(syntax);
+
+                    for row in &mut self.rows {
+                        row.update_syntax(self.syntax);
+                    }
+
+                    return;
+                }
             }
         }
     }
@@ -565,13 +627,21 @@ fn draw_status_bar(out: &mut impl Write, config: &EditorConfig) -> io::Result<()
 
     let modified = if config.dirty { "(modified)" } else { "" };
 
+    let filetype = config.syntax.map(|s| s.filetype).unwrap_or("no ft");
+
     let display_text = format!(
         "{} - {} lines {}",
         filename_str,
         config.rows.len(),
         modified
     );
-    let right_display_text = format!("{}/{}", config.cursor_y + 1, config.rows.len());
+
+    let right_display_text = format!(
+        "{} | {}/{}",
+        filetype,
+        config.cursor_y + 1,
+        config.rows.len()
+    );
 
     let display_len = display_text.chars().count() as u16;
     let right_len = right_display_text.chars().count() as u16;
