@@ -52,4 +52,4 @@ do a side by side comp with vim (to see the same color)
 
 # status
 
-Current step : Step 177
+Current step : Guide finished ! :D
