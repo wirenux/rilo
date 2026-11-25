@@ -1006,7 +1006,7 @@ fn draw_status_bar(out: &mut impl Write, config: &EditorConfig) -> io::Result<()
 
     let modified = if config.dirty { "(modified)" } else { "" };
 
-    let filetype = config.syntax.map(|s| s.filetype).unwrap_or("no ft");
+    let filetype = config.syntax.map(|s| s.filetype).unwrap_or("no filetype");
 
     let display_text = format!(
         "{} - {} lines {}",
