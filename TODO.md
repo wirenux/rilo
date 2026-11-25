@@ -10,8 +10,8 @@
 - [x] Add better welcome message with color, github link etc...
     - [x] Say that ESC in a prompt exit the prompt
 - [x] change key to use on macos (like no page up etc... and use `Ctrl+...` which is better ig)
-- [ ] able to `save as` even for existing file with `ctrl-shift-s`
-    - [ ] put it in the welcome message
+- [x] able to `save as` even for existing file with `ctrl-shift-s`
+    - [x] put it in the welcome message
 - [ ] when searching search on the whole line not just the start
 - [ ] add `ctrl-z` and `ctrl-shift-z` to undo and redo
     - [ ] add something like a stack
@@ -53,6 +53,10 @@ choice :
 
 - no incremental search
 - hex support in c
+
+workaround:
+
+- not all term support ctrl+shift+s so ctrl+o does the same thing (save as...)
 
 control : (do a table)
 

@@ -572,20 +572,27 @@ impl EditorConfig {
 
     fn save(&mut self) -> io::Result<()> {
         if self.filename.is_empty() {
-            match self.prompt("Save as: {}")? {
-                Some(name) => {
-                    self.filename = name;
-                    self.select_syntax_highlight();
-
-                    self.update_all_syntax();
-                }
-                None => {
-                    self.set_status_message("Warning: Save aborted");
-                    return Ok(());
-                }
-            }
+            return self.save_as();
         }
 
+        self.write_file()
+    }
+
+    fn save_as(&mut self) -> io::Result<()> {
+        let Some(name) = self.prompt("Save as: {}")? else {
+            self.set_status_message("Warning: Save aborted");
+            return Ok(());
+        };
+
+        self.filename = name;
+
+        self.select_syntax_highlight();
+        self.update_all_syntax();
+
+        self.write_file()
+    }
+
+    fn write_file(&mut self) -> io::Result<()> {
         let content = self.rows_to_string();
         let len = content.len();
 
@@ -782,6 +789,8 @@ fn welcome_lines() -> Vec<Vec<(String, Color)>> {
 
     let keys = [
         ("Ctrl-S", "to save"),
+        ("Ctrl-Shift-S", "to save as..."),
+        ("  (Ctrl-O)", "to save as..."),
         ("Ctrl-F", "to search"),
         ("Ctrl-C", "to quit"),
         ("Esc", "to clear search/prompt"),
@@ -1119,6 +1128,17 @@ fn main() -> io::Result<()> {
 
                 KeyCode::Char('f') if modifiers.contains(KeyModifiers::CONTROL) => {
                     editor_config.find()?
+                }
+
+                KeyCode::Char('s' | 'S')
+                    if modifiers.contains(KeyModifiers::CONTROL)
+                        && modifiers.contains(KeyModifiers::SHIFT) =>
+                {
+                    editor_config.save_as()?
+                }
+
+                KeyCode::Char('o') if modifiers.contains(KeyModifiers::CONTROL) => {
+                    editor_config.save_as()?
                 }
 
                 KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
