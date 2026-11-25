@@ -16,15 +16,17 @@
 - [ ] add `ctrl-z` and `ctrl-shift-z` to undo and redo
     - [ ] add something like a stack
     - [ ] put it in the welcome message
-- [ ] add config file like `~/.rilorc`
-    - [ ] open the file
-    - [ ] read for `TAB_STOP=X`
-    - [ ] read for `QUIT_TIMES=X`
-    - [ ] read this file at each launch
-    - [ ] Do nothing if file not present (or maybe add a little status message)
+- [x] add config file like `~/.rilorc`
+    - [x] open the file
+    - [x] read for `TAB_STOP=X`
+    - [x] read for `QUIT_TIMES=X`
+    - [x] read this file at each launch
+    - [x] Do nothing if file not present (or maybe add a little status message)
+    - [x] talk about it in welcome message
 - [x] add hex in c support
 - [x] add `#include` and `#define` c support
 - [ ] add line number on the 1st colon only when there is text
+
 - [ ] make the editor about 1000 lines
 
 - [ ] Do a `// TODO` check
@@ -61,6 +63,10 @@ workaround:
 control : (do a table)
 
 do a side by side comp with vim (to see the same color)
+
+debug:
+
+- to get the log / print in  the term : open to term. In the 2nd one type `tty` (to get the tty number) and in the main one type : `cargo run 2>/dev/TTY_NUMBER_YOU_GOT`
 
 # status
 

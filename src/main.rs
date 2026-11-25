@@ -11,7 +11,10 @@ use crossterm::{
 };
 use std::{
     env::{self},
+    fs::File,
+    io::{BufRead, BufReader, Read},
     ops::RemAssign,
+    path::PathBuf,
     time::Instant,
 };
 use std::{fs, io};
@@ -21,8 +24,6 @@ use std::{
 };
 
 const RILO_VERSION: &str = env!("CARGO_PKG_VERSION");
-const TAB_STOP: usize = 8;
-const QUIT_TIMES: u8 = 1;
 
 const HL_HIGHLIGHT_NUMBER: u32 = 1 << 0;
 const HL_HIGHLIGHT_STRING: u32 = 1 << 1;
@@ -85,6 +86,8 @@ struct EditorConfig {
     last_match: Option<usize>,
     search_direction: i8,
     syntax: Option<&'static EditorSyntax>,
+    tab_stop: usize,
+    quit_times: usize,
 }
 
 struct EditorRow {
@@ -116,7 +119,7 @@ const HLDB: &[EditorSyntax] = &[EditorSyntax {
 }];
 
 impl EditorRow {
-    fn new(chars: String, syntax: Option<&EditorSyntax>) -> Self {
+    fn new(chars: String, syntax: Option<&EditorSyntax>, tab_stop: usize) -> Self {
         let mut row = Self {
             chars,
             render: String::new(),
@@ -124,11 +127,11 @@ impl EditorRow {
             start_in_comment: false,
             open_comment: false,
         };
-        row.update_render(syntax);
+        row.update_render(syntax, tab_stop);
         row
     }
 
-    fn cx_to_rx(&self, cursor_x: usize) -> usize {
+    fn cx_to_rx(&self, cursor_x: usize, tab_stop: usize) -> usize {
         let mut render_x: usize = 0;
 
         for (i, ch) in self.chars.chars().enumerate() {
@@ -136,7 +139,7 @@ impl EditorRow {
                 break;
             }
             if ch == '\t' {
-                render_x += (TAB_STOP - 1) - (render_x % TAB_STOP);
+                render_x += (tab_stop - 1) - (render_x % tab_stop);
             }
             render_x += 1;
         }
@@ -144,12 +147,12 @@ impl EditorRow {
         render_x
     }
 
-    fn rx_to_cx(&self, render_x: usize) -> usize {
+    fn rx_to_cx(&self, render_x: usize, tab_stop: usize) -> usize {
         let mut cursor_x = 0;
 
         for (cx, ch) in self.chars.chars().enumerate() {
             if ch == '\t' {
-                cursor_x += (TAB_STOP - 1) - (cursor_x % TAB_STOP);
+                cursor_x += (tab_stop - 1) - (cursor_x % tab_stop);
             }
 
             cursor_x += 1;
@@ -162,7 +165,7 @@ impl EditorRow {
         self.chars.chars().count()
     }
 
-    fn update_render(&mut self, syntax: Option<&EditorSyntax>) {
+    fn update_render(&mut self, syntax: Option<&EditorSyntax>, tab_stop: usize) {
         let tab_count = self.chars.chars().filter(|&c| c == '\t').count();
         self.render.clear();
         self.render.reserve(self.chars.len() + tab_count * 7);
@@ -172,7 +175,7 @@ impl EditorRow {
             if ch == '\t' {
                 self.render.push(' ');
                 idx += 1;
-                while idx % TAB_STOP != 0 {
+                while idx % tab_stop != 0 {
                     self.render.push(' ');
                     idx += 1;
                 }
@@ -185,7 +188,7 @@ impl EditorRow {
         self.update_syntax(syntax);
     }
 
-    fn insert_char(&mut self, at: usize, c: char, syntax: Option<&EditorSyntax>) {
+    fn insert_char(&mut self, at: usize, c: char, syntax: Option<&EditorSyntax>, tab_stop: usize) {
         let byte_idx = self
             .chars
             .char_indices()
@@ -193,13 +196,13 @@ impl EditorRow {
             .map_or(self.chars.len(), |(idx, _)| idx);
 
         self.chars.insert(byte_idx, c);
-        self.update_render(syntax);
+        self.update_render(syntax, tab_stop);
     }
 
-    fn del_char(&mut self, at: usize, syntax: Option<&EditorSyntax>) {
+    fn del_char(&mut self, at: usize, syntax: Option<&EditorSyntax>, tab_stop: usize) {
         if let Some((byte_idx, _)) = self.chars.char_indices().nth(at) {
             self.chars.remove(byte_idx);
-            self.update_render(syntax);
+            self.update_render(syntax, tab_stop);
         }
     }
 
@@ -397,6 +400,8 @@ impl EditorConfig {
             last_match: None,
             search_direction: 1,
             syntax: None,
+            tab_stop: 4,
+            quit_times: 1,
         })
     }
 
@@ -408,7 +413,7 @@ impl EditorConfig {
 
         self.rows = content
             .lines()
-            .map(|line| EditorRow::new(line.to_string(), self.syntax))
+            .map(|line| EditorRow::new(line.to_string(), self.syntax, self.tab_stop))
             .collect();
 
         self.update_all_syntax();
@@ -468,8 +473,8 @@ impl EditorConfig {
     fn scroll(&mut self) {
         self.render_x = 0;
         if (self.cursor_y as usize) < self.rows.len() {
-            self.render_x =
-                self.rows[self.cursor_y as usize].cx_to_rx(self.cursor_x as usize) as u16;
+            self.render_x = self.rows[self.cursor_y as usize]
+                .cx_to_rx(self.cursor_x as usize, self.tab_stop) as u16;
         }
 
         if self.cursor_y < self.row_offset {
@@ -493,10 +498,16 @@ impl EditorConfig {
 
     fn insert_char(&mut self, c: char) {
         if (self.cursor_y as usize) == self.rows.len() {
-            self.rows.push(EditorRow::new(String::new(), self.syntax));
+            self.rows
+                .push(EditorRow::new(String::new(), self.syntax, self.tab_stop));
         }
 
-        self.rows[self.cursor_y as usize].insert_char(self.cursor_x as usize, c, self.syntax);
+        self.rows[self.cursor_y as usize].insert_char(
+            self.cursor_x as usize,
+            c,
+            self.syntax,
+            self.tab_stop,
+        );
         self.dirty = true;
         self.update_all_syntax();
         self.cursor_x += 1;
@@ -511,7 +522,7 @@ impl EditorConfig {
         }
 
         if cx > 0 {
-            self.rows[cy].del_char(cx - 1, self.syntax);
+            self.rows[cy].del_char(cx - 1, self.syntax, self.tab_stop);
             self.cursor_x -= 1;
         } else {
             let current_row = self.rows.remove(cy);
@@ -520,7 +531,7 @@ impl EditorConfig {
             self.cursor_x = prev_row.chars.chars().count() as u16;
 
             prev_row.chars.push_str(&current_row.chars);
-            prev_row.update_render(self.syntax);
+            prev_row.update_render(self.syntax, self.tab_stop);
 
             self.cursor_y -= 1;
         }
@@ -535,8 +546,10 @@ impl EditorConfig {
 
         if cx == 0 {
             // if cursor is at the start of a line (or the bottom ~)
-            self.rows
-                .insert(cy, EditorRow::new(String::new(), self.syntax));
+            self.rows.insert(
+                cy,
+                EditorRow::new(String::new(), self.syntax, self.tab_stop),
+            );
         } else {
             // if cursor at the middle of a line
             let byte_idx = self.rows[cy]
@@ -546,10 +559,12 @@ impl EditorConfig {
                 .map_or(self.rows[cy].chars.len(), |(idx, _)| idx);
 
             let right_half = self.rows[cy].chars.split_off(byte_idx);
-            self.rows[cy].update_render(self.syntax);
+            self.rows[cy].update_render(self.syntax, self.tab_stop);
 
-            self.rows
-                .insert(cy + 1, EditorRow::new(right_half, self.syntax));
+            self.rows.insert(
+                cy + 1,
+                EditorRow::new(right_half, self.syntax, self.tab_stop),
+            );
         }
 
         self.update_all_syntax();
@@ -683,7 +698,7 @@ impl EditorConfig {
 
             if let Some(match_index) = &self.rows[i].render.find(&self.search_query) {
                 self.cursor_y = i as u16;
-                self.cursor_x = self.rows[i].rx_to_cx(*match_index) as u16;
+                self.cursor_x = self.rows[i].rx_to_cx(*match_index, self.tab_stop) as u16;
 
                 self.last_match = Some(i);
                 self.search_direction = direction;
@@ -755,6 +770,48 @@ impl EditorConfig {
             open = row.open_comment;
         }
     }
+
+    fn config_path() -> io::Result<PathBuf> {
+        let home = env::var_os("HOME")
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME not set"))?;
+        Ok(PathBuf::from(home).join(".rilorc"))
+    }
+
+    fn parse_config(&mut self) -> io::Result<()> {
+        let path = EditorConfig::config_path()?;
+
+        let file = File::open(path)?;
+        let reader = BufReader::new(file);
+
+        for line in reader.lines() {
+            let line = line?;
+            eprintln!("{line}");
+            let trimmed = line.trim();
+
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+
+            if let Some((key, value)) = trimmed.split_once('=') {
+                let value = value.trim();
+
+                match key.trim() {
+                    "QUIT_TIMES" => {
+                        self.quit_times = value
+                            .parse()
+                            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+                    }
+                    "TAB_STOP" => {
+                        self.tab_stop = value
+                            .parse()
+                            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 fn clear_screen() -> io::Result<()> {
@@ -784,6 +841,7 @@ fn welcome_lines() -> Vec<Vec<(String, Color)>> {
         vec![s(&format!("version {}", RILO_VERSION), text)],
         vec![s("open source, written in Rust", text)],
         vec![s("https://github.com/wirenux/rilo", Color::Blue)],
+        vec![s("(a ~/.rilorc might be useful :D)", Color::Grey)],
         vec![],
     ];
 
@@ -1091,16 +1149,20 @@ fn main() -> io::Result<()> {
 
     let mut editor_config = EditorConfig::new()?;
 
-    let mut quit_times = QUIT_TIMES;
+    enable_raw_mode()?;
+
+    let _ = editor_config.parse_config();
 
     // check for file
     if let Some(path) = file_path {
         editor_config.open(path)?;
     }
 
-    enable_raw_mode()?;
+    if editor_config.status_message.is_empty() {
+        editor_config.set_status_message("Help: Ctrl-C = Quit | Ctrl-S = Save | Ctrl-F = Find");
+    }
 
-    editor_config.set_status_message("Help: Ctrl-C = Quit | Ctrl-S = Save | Ctrl-F = Find");
+    let mut quit_times = editor_config.quit_times;
 
     // main loop
     loop {
@@ -1224,7 +1286,7 @@ fn main() -> io::Result<()> {
 
                 _ => {}
             }
-            quit_times = QUIT_TIMES;
+            quit_times = editor_config.quit_times;
         }
     }
 
