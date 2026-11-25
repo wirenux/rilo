@@ -1141,11 +1141,11 @@ fn main() -> io::Result<()> {
                     }
                 }
 
-                KeyCode::Home => {
+                KeyCode::Char('a') if modifiers.contains(KeyModifiers::CONTROL) => {
                     editor_config.cursor_x = 0;
                 }
 
-                KeyCode::End => {
+                KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) => {
                     let cursor_y = editor_config.cursor_y as usize;
                     if cursor_y < editor_config.rows.len() {
                         editor_config.cursor_x =
@@ -1153,7 +1153,7 @@ fn main() -> io::Result<()> {
                     }
                 }
 
-                KeyCode::PageUp => {
+                KeyCode::Char('w') if modifiers.contains(KeyModifiers::CONTROL) => {
                     editor_config.cursor_y = editor_config.row_offset;
                     let term_rows = editor_config.terminal_rows;
                     for _ in 0..term_rows {
@@ -1161,7 +1161,7 @@ fn main() -> io::Result<()> {
                     }
                 }
 
-                KeyCode::PageDown => {
+                KeyCode::Char('x') if modifiers.contains(KeyModifiers::CONTROL) => {
                     let max_row = editor_config.rows.len() as u16;
 
                     editor_config.cursor_y =

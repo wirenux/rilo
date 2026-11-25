@@ -9,7 +9,7 @@
 - [ ] Python higlighting
 - [x] Add better welcome message with color, github link etc...
     - [x] Say that ESC in a prompt exit the prompt
-- [ ] change key to use on macos (like no page up etc... and use `Ctrl+...` which is better ig)
+- [x] change key to use on macos (like no page up etc... and use `Ctrl+...` which is better ig)
 - [ ] able to `save as` even for existing file with `ctrl-shift-s`
     - [ ] put it in the welcome message
 - [ ] when searching search on the whole line not just the start
@@ -25,6 +25,7 @@
 - [x] add hex in c support
 - [x] add `#include` and `#define` c support
 - [ ] add line number on the 1st colon only when there is text
+- [ ] make the editor about 1000 lines
 
 - [ ] Do a `// TODO` check
 
