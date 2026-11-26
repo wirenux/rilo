@@ -505,8 +505,8 @@ impl EditorConfig {
         if self.render_x < self.col_offset {
             self.col_offset = self.render_x;
         }
-        if self.render_x >= self.col_offset + self.terminal_cols {
-            self.col_offset = self.render_x - self.terminal_cols + 1;
+        if self.render_x >= self.col_offset + self.text_cols() {
+            self.col_offset = self.render_x - self.text_cols() + 1;
         }
     }
 
@@ -857,6 +857,14 @@ impl EditorConfig {
         }
         Ok(())
     }
+
+    fn gutter_width(&self) -> u16 {
+        (self.rows.len().max(1).to_string().len() + 1) as u16
+    }
+
+    fn text_cols(&self) -> u16 {
+        self.terminal_cols.saturating_sub(self.gutter_width())
+    }
 }
 
 fn clear_screen() -> io::Result<()> {
@@ -967,18 +975,30 @@ fn draw_welcome_lines(
 fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
     let welcome = welcome_lines();
     let n = welcome.len();
-    let cols = config.terminal_cols as usize;
 
     let show_welcome = config.rows.is_empty() && (config.terminal_rows as usize) > n + 2;
     let welcome_start = (config.terminal_rows as usize).saturating_sub(n) / 3;
 
+    let gutter = config.gutter_width() as usize;
+    let text_cols = config.text_cols() as usize;
+
     for y in 0..config.terminal_rows {
         let file_row = (y as usize) + (config.row_offset as usize);
+        if file_row < config.rows.len() {
+            queue!(
+                out,
+                SetForegroundColor(Color::DarkGrey),
+                Print(format!("{:>w$} ", file_row + 1, w = gutter - 1)),
+                ResetColor,
+            )?;
+        } else {
+            queue!(out, Print(" ".repeat(gutter)))?;
+        }
         if file_row >= config.rows.len() {
             let welcome_idx = (y as usize).checked_sub(welcome_start).filter(|&k| k < n);
 
             if show_welcome && let Some(k) = welcome_idx {
-                draw_welcome_lines(out, &welcome[k], cols)?;
+                draw_welcome_lines(out, &welcome[k], text_cols)?;
             } else {
                 queue!(
                     out,
@@ -990,7 +1010,7 @@ fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
         } else {
             let line = &config.rows[file_row].render;
             let start = config.col_offset as usize;
-            let end = start + config.terminal_cols as usize;
+            let end = start + text_cols;
 
             for (byte_idx, ch) in line.char_indices() {
                 if byte_idx < start {
@@ -1172,7 +1192,7 @@ fn refresh_screen(
     let (target_x, target_y) = match cursor_override {
         Some((col, row)) => (col, row),
         None => (
-            config.render_x.saturating_sub(config.col_offset),
+            config.render_x.saturating_sub(config.col_offset) + config.gutter_width(),
             config.cursor_y.saturating_sub(config.row_offset),
         ),
     };

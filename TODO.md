@@ -13,7 +13,7 @@
 - [x] able to `save as` even for existing file with `ctrl-shift-s`
     - [x] put it in the welcome message
 - [x] when searching search on the whole line not just the start
-- [ ] add `ctrl-z` and `ctrl-shift-z` to undo and redo
+- [ ] ? add `ctrl-z` and `ctrl-shift-z` to undo and redo
     - [ ] add something like a stack
     - [ ] put it in the welcome message
 - [x] add config file like `~/.rilorc`
@@ -25,8 +25,8 @@
     - [x] talk about it in welcome message
 - [x] add hex in c support
 - [x] add `#include` and `#define` c support
-- [ ] add line number on the 1st colon only when there is text
-    - [ ] Get total line of file to know how much number 
+- [x] add line number on the 1st colon only when there is text
+    - [x] Get total line of file to know how much number
 - [ ] auto-indent
 
 - [ ] make the editor about 1000 lines of code
@@ -35,6 +35,7 @@
 
 - [ ] **(LAST)** change version to v1.0.0
 - [ ] **(LAST)** create a github release
+- [ ] **(LAST)** do the thing to choose file in the crates.io project
 - [ ] **(LAST)** upload on `crates.io`
 
 # say in readme :
