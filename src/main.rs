@@ -87,6 +87,7 @@ struct EditorConfig {
     syntax: Option<&'static EditorSyntax>,
     tab_stop: usize,
     quit_times: usize,
+    show_lines_number: bool,
 }
 
 struct EditorRow {
@@ -421,6 +422,7 @@ impl EditorConfig {
             syntax: None,
             tab_stop: 4,
             quit_times: 1,
+            show_lines_number: true,
         })
     }
 
@@ -851,6 +853,11 @@ impl EditorConfig {
                             .parse()
                             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
                     }
+                    "SHOW_LINES_NUMBER" => {
+                        self.show_lines_number = value
+                            .parse()
+                            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+                    }
                     _ => {}
                 }
             }
@@ -859,6 +866,9 @@ impl EditorConfig {
     }
 
     fn gutter_width(&self) -> u16 {
+        if !self.show_lines_number {
+            return 0;
+        }
         (self.rows.len().max(1).to_string().len() + 1) as u16
     }
 
@@ -984,15 +994,17 @@ fn draw_rows(out: &mut impl Write, config: &EditorConfig) -> io::Result<()> {
 
     for y in 0..config.terminal_rows {
         let file_row = (y as usize) + (config.row_offset as usize);
-        if file_row < config.rows.len() {
-            queue!(
-                out,
-                SetForegroundColor(Color::DarkGrey),
-                Print(format!("{:>w$} ", file_row + 1, w = gutter - 1)),
-                ResetColor,
-            )?;
-        } else {
-            queue!(out, Print(" ".repeat(gutter)))?;
+        if gutter > 0 {
+            if file_row < config.rows.len() {
+                queue!(
+                    out,
+                    SetForegroundColor(Color::DarkGrey),
+                    Print(format!("{:>w$} ", file_row + 1, w = gutter - 1)),
+                    ResetColor,
+                )?;
+            } else {
+                queue!(out, Print(" ".repeat(gutter)))?;
+            }
         }
         if file_row >= config.rows.len() {
             let welcome_idx = (y as usize).checked_sub(welcome_start).filter(|&k| k < n);

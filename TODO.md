@@ -27,6 +27,7 @@
 - [x] add `#include` and `#define` c support
 - [x] add line number on the 1st colon only when there is text
     - [x] Get total line of file to know how much number
+    - [x] able to turn off with `~/.rilorc`
 - [ ] auto-indent
 
 - [ ] make the editor about 1000 lines of code
@@ -53,6 +54,7 @@ func :
 - use `queue!()` for less/no flicker
 - hex support in c
 - `#define` and `#include` support in c
+- `~/.rilorc`
 
 choice :
 
@@ -70,6 +72,8 @@ do a side by side comp with vim (to see the same color)
 debug:
 
 - to get the log / print in  the term : open to term. In the 2nd one type `tty` (to get the tty number) and in the main one type : `cargo run 2>/dev/TTY_NUMBER_YOU_GOT`
+
+explain how `~/.rilorc` work and what are the settings that you can put
 
 # status
 
