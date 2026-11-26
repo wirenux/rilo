@@ -83,7 +83,7 @@ struct EditorConfig {
     status_message_time: Option<Instant>,
     dirty: bool,
     search_query: String,
-    last_match: Option<usize>,
+    last_match: Option<(usize, usize)>,
     search_direction: i8,
     syntax: Option<&'static EditorSyntax>,
     tab_stop: usize,
@@ -687,25 +687,51 @@ impl EditorConfig {
             return;
         }
 
-        let start = self.last_match.unwrap_or(0);
+        let len = self.rows.len();
+        let (mut row_idx, mut search_from_byte) = match self.last_match {
+            Some((r, byte_idx)) => (r, byte_idx),
+            None => (self.cursor_y.min((len - 1) as u16) as usize, 0),
+        };
 
-        for step in 1..=self.rows.len() {
-            let i = if direction == 1 {
-                (start + step) % self.rows.len()
+        for _ in 0..len {
+            let render = &self.rows[row_idx].render;
+
+            let found_byte = if direction == 1 {
+                let start_byte = if self.last_match.is_some() {
+                    render[search_from_byte..]
+                        .chars()
+                        .next()
+                        .map_or(render.len(), |c| search_from_byte + c.len_utf8())
+                } else {
+                    search_from_byte
+                };
+                render
+                    .get(start_byte..)
+                    .and_then(|tail| tail.find(&self.search_query))
+                    .map(|rel| start_byte + rel)
             } else {
-                (start + self.rows.len() - (step % self.rows.len())) % self.rows.len()
+                let end_byte = search_from_byte.min(render.len());
+                render
+                    .get(..end_byte)
+                    .and_then(|head| head.rfind(&self.search_query))
             };
 
-            if let Some(match_index) = &self.rows[i].render.find(&self.search_query) {
-                self.cursor_y = i as u16;
-                self.cursor_x = self.rows[i].rx_to_cx(*match_index, self.tab_stop) as u16;
-
-                self.last_match = Some(i);
+            if let Some(match_byte) = found_byte {
+                let match_rx = render[..match_byte].chars().count();
+                self.cursor_y = row_idx as u16;
+                self.cursor_x = self.rows[row_idx].rx_to_cx(match_rx, self.tab_stop) as u16;
+                self.last_match = Some((row_idx, match_byte));
                 self.search_direction = direction;
-
                 self.highlight_match();
-
                 return;
+            }
+
+            if direction == 1 {
+                row_idx = (row_idx + 1) % len;
+                search_from_byte = 0;
+            } else {
+                row_idx = (row_idx + len - 1) % len;
+                search_from_byte = self.rows[row_idx].render.len();
             }
         }
 
