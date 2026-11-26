@@ -4,7 +4,7 @@ use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute, queue,
     style::{
-        Attribute::{self, Reset},
+        Attribute::{self},
         Color, Print, ResetColor, SetAttribute, SetForegroundColor,
     },
     terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode, size},
@@ -12,8 +12,7 @@ use crossterm::{
 use std::{
     env::{self},
     fs::File,
-    io::{BufRead, BufReader, Read},
-    ops::RemAssign,
+    io::{BufRead, BufReader},
     path::PathBuf,
     time::Instant,
 };
@@ -30,30 +29,21 @@ const HL_HIGHLIGHT_STRING: u32 = 1 << 1;
 const HL_HIGHLIGHT_PREPOC: u32 = 1 << 2;
 
 const C_HL_EXTENSION: &[&str] = &[".c", ".h", ".cpp"];
+
+#[rustfmt::skip]
 const C_HL_KEYWORDS: &[&str] = &[
-    "switch",
-    "if",
-    "while",
-    "for",
-    "break",
-    "continue",
-    "return",
-    "else",
-    "struct",
-    "union",
-    "typedef",
-    "static",
-    "enum",
-    "class",
-    "case",
-    "int|",
-    "long|",
-    "double|",
-    "float|",
-    "char|",
-    "unsigned|",
-    "signed|",
-    "void|",
+    "switch", "if", "while", "for", "break", "continue", "return", "else",
+    "struct", "union", "typedef", "static", "enum", "class", "case",
+    "int|", "long|", "double|", "float|", "char|", "unsigned|", "signed|", "void|",
+];
+
+const RUST_HL_EXTENSION: &[&str] = &[".rs"];
+const RUST_HL_KEYWORDS: &[&str] = &[
+    "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern",
+    "false", "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub",
+    "ref", "return", "self", "Self", "static", "struct", "super", "trait", "true", "type",
+    "unsafe", "use", "where", "while", "bool|", "char|", "f32|", "f64|", "i8|", "i16|", "i32|",
+    "i64|", "i128|", "isize|", "str|", "u8|", "u16|", "u32|", "u64|", "u128|", "usize|",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -108,15 +98,26 @@ struct EditorSyntax {
     flags: u32,
 }
 
-const HLDB: &[EditorSyntax] = &[EditorSyntax {
-    filetype: "c",
-    filematch: C_HL_EXTENSION,
-    keywords: C_HL_KEYWORDS,
-    singleline_comment_start: "//",
-    multiline_comment_start: "/*",
-    multiline_comment_end: "*/",
-    flags: HL_HIGHLIGHT_NUMBER | HL_HIGHLIGHT_STRING | HL_HIGHLIGHT_PREPOC,
-}];
+const HLDB: &[EditorSyntax] = &[
+    EditorSyntax {
+        filetype: "c",
+        filematch: C_HL_EXTENSION,
+        keywords: C_HL_KEYWORDS,
+        singleline_comment_start: "//",
+        multiline_comment_start: "/*",
+        multiline_comment_end: "*/",
+        flags: HL_HIGHLIGHT_NUMBER | HL_HIGHLIGHT_STRING | HL_HIGHLIGHT_PREPOC,
+    },
+    EditorSyntax {
+        filetype: "rust",
+        filematch: RUST_HL_EXTENSION,
+        keywords: RUST_HL_KEYWORDS,
+        singleline_comment_start: "//",
+        multiline_comment_start: "/*",
+        multiline_comment_end: "*/",
+        flags: HL_HIGHLIGHT_NUMBER | HL_HIGHLIGHT_STRING,
+    },
+];
 
 impl EditorRow {
     fn new(chars: String, syntax: Option<&EditorSyntax>, tab_stop: usize) -> Self {

@@ -4,7 +4,7 @@
 - [x] Add the write part of the editor
 - [x] Add the search part of the editor
 - [x] Add the higlighting part of the editor
-- [ ] Rust higlighting
+- [x] Rust higlighting
 - [x] C higlighting
 - [ ] Python higlighting
 - [x] Add better welcome message with color, github link etc...
@@ -26,6 +26,8 @@
 - [x] add hex in c support
 - [x] add `#include` and `#define` c support
 - [ ] add line number on the 1st colon only when there is text
+    - [ ] Get total line of file to know how much number 
+- [ ] auto-indent
 
 - [ ] make the editor about 1000 lines
 
