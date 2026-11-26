@@ -46,6 +46,15 @@ const RUST_HL_KEYWORDS: &[&str] = &[
     "i64|", "i128|", "isize|", "str|", "u8|", "u16|", "u32|", "u64|", "u128|", "usize|",
 ];
 
+const PYTHON_HL_EXTENSION: &[&str] = &[".py", ".pyc"];
+const PYTHON_HL_KEYWORDS: &[&str] = &[
+    "and", "as", "assert", "async", "await", "break", "case", "class", "continue", "def", "del",
+    "elif", "else", "except", "finally", "for", "from", "global", "if", "import", "in", "is",
+    "lamba", "match", "nonlocal", "not", "or", "pass", "raise", "return", "try", "while", "with",
+    "yield", "False", "True", "None", "int|", "float|", "bool|", "str|", "list|", "tuple|",
+    "dict|", "set|",
+];
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum EditorHighlight {
     Normal = 0,
@@ -115,6 +124,15 @@ const HLDB: &[EditorSyntax] = &[
         singleline_comment_start: "//",
         multiline_comment_start: "/*",
         multiline_comment_end: "*/",
+        flags: HL_HIGHLIGHT_NUMBER | HL_HIGHLIGHT_STRING,
+    },
+    EditorSyntax {
+        filetype: "python",
+        filematch: PYTHON_HL_EXTENSION,
+        keywords: PYTHON_HL_KEYWORDS,
+        singleline_comment_start: "#",
+        multiline_comment_start: "\"\"\"",
+        multiline_comment_end: "\"\"\"",
         flags: HL_HIGHLIGHT_NUMBER | HL_HIGHLIGHT_STRING,
     },
 ];

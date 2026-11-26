@@ -6,7 +6,7 @@
 - [x] Add the higlighting part of the editor
 - [x] Rust higlighting
 - [x] C higlighting
-- [ ] Python higlighting
+- [x] Python higlighting
 - [x] Add better welcome message with color, github link etc...
     - [x] Say that ESC in a prompt exit the prompt
 - [x] change key to use on macos (like no page up etc... and use `Ctrl+...` which is better ig)
