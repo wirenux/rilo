@@ -29,7 +29,7 @@
     - [ ] Get total line of file to know how much number 
 - [ ] auto-indent
 
-- [ ] make the editor about 1000 lines
+- [ ] make the editor about 1000 lines of code
 
 - [ ] Do a `// TODO` check
 
