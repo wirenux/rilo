@@ -88,6 +88,7 @@ struct EditorConfig {
     tab_stop: usize,
     quit_times: usize,
     show_lines_number: bool,
+    auto_indent: bool,
 }
 
 struct EditorRow {
@@ -423,6 +424,7 @@ impl EditorConfig {
             tab_stop: 4,
             quit_times: 1,
             show_lines_number: true,
+            auto_indent: true,
         })
     }
 
@@ -564,6 +566,7 @@ impl EditorConfig {
     fn insert_newline(&mut self) {
         let cx = self.cursor_x as usize;
         let cy = self.cursor_y as usize;
+        let mut new_cursor_x = 0;
 
         if cx == 0 {
             // if cursor is at the start of a line (or the bottom ~)
@@ -572,6 +575,18 @@ impl EditorConfig {
                 EditorRow::new(String::new(), self.syntax, self.tab_stop),
             );
         } else {
+            let indent: String = if self.auto_indent {
+                self.rows[cy]
+                    .chars
+                    .chars()
+                    .take(cx)
+                    .take_while(|&c| c == ' ' || c == '\t')
+                    .collect()
+            } else {
+                String::new()
+            };
+            new_cursor_x = indent.chars().count();
+
             // if cursor at the middle of a line
             let byte_idx = self.rows[cy]
                 .chars
@@ -582,15 +597,16 @@ impl EditorConfig {
             let right_half = self.rows[cy].chars.split_off(byte_idx);
             self.rows[cy].update_render(self.syntax, self.tab_stop);
 
-            self.rows.insert(
-                cy + 1,
-                EditorRow::new(right_half, self.syntax, self.tab_stop),
-            );
+            let mut new_line = indent;
+            new_line.push_str(&right_half);
+
+            self.rows
+                .insert(cy + 1, EditorRow::new(new_line, self.syntax, self.tab_stop));
         }
 
         self.update_all_syntax();
         self.cursor_y += 1;
-        self.cursor_x = 0;
+        self.cursor_x = new_cursor_x as u16;
         self.dirty = true;
     }
 
@@ -855,6 +871,11 @@ impl EditorConfig {
                     }
                     "SHOW_LINES_NUMBER" => {
                         self.show_lines_number = value
+                            .parse()
+                            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+                    }
+                    "AUTO_INDENT" => {
+                        self.auto_indent = value
                             .parse()
                             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
                     }

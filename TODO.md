@@ -13,9 +13,9 @@
 - [x] able to `save as` even for existing file with `ctrl-shift-s`
     - [x] put it in the welcome message
 - [x] when searching search on the whole line not just the start
-- [ ] ? add `ctrl-z` and `ctrl-shift-z` to undo and redo
-    - [ ] add something like a stack
-    - [ ] put it in the welcome message
+- [?] add `ctrl-z` and `ctrl-shift-z` to undo and redo
+    - [?] add something like a stack
+    - [?] put it in the welcome message
 - [x] add config file like `~/.rilorc`
     - [x] open the file
     - [x] read for `TAB_STOP=X`
@@ -28,7 +28,8 @@
 - [x] add line number on the 1st colon only when there is text
     - [x] Get total line of file to know how much number
     - [x] able to turn off with `~/.rilorc`
-- [ ] auto-indent
+- [x] auto-indent
+    - [x] search in `~/.rilorc`
 
 - [ ] make the editor about 1000 lines of code
 
@@ -55,6 +56,7 @@ func :
 - hex support in c
 - `#define` and `#include` support in c
 - `~/.rilorc`
+- auto-indent
 
 choice :
 
