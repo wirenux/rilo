@@ -8,7 +8,7 @@ repository = "https://github.com/wirenux/rilo"
 readme = "README.md"
 keywords = ["editor", "terminal", "text-editor", "tui", "kilo"]
 categories = ["text-editors", "command-line-utilities"]
-exclude = ["assets/", "test/"]
+exclude = ["assets/", "test/", "TODO.md"]
 
 [dependencies]
 crossterm = "0.29.0"
