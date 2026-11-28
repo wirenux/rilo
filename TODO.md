@@ -30,6 +30,9 @@
     - [x] able to turn off with `~/.rilorc`
 - [x] auto-indent
     - [x] search in `~/.rilorc`
+- [ ] ctrl-g: go to line X (using prompt)
+- [ ] when typing `(` or `{` or `[` auto complete with the other one
+- [ ] current line number higlighted / change color to White
 
 - [x] make the editor about 1000 lines of code
 
