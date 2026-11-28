@@ -1,7 +1,14 @@
 [package]
 name = "rilo"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
+description = "A code editor in the terminal, inspired by kilo"
+license = "MIT"
+repository = "https://github.com/wirenux/rilo"
+readme = "README.md"
+keywords = ["editor", "terminal", "text-editor", "tui", "kilo"]
+categories = ["text-editors", "command-line-utilities"]
+exclude = ["assets/", "test/"]
 
 [dependencies]
 crossterm = "0.29.0"

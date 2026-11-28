@@ -35,9 +35,9 @@
 
 - [x] Do a `// TODO` check
 
-- [ ] **(LAST)** change version to v1.0.0
+- [x] **(LAST)** change version to v1.0.0
 - [ ] **(LAST)** create a github release
-- [ ] **(LAST)** do the thing to choose file in the crates.io project
+- [x] **(LAST)** do the thing to choose file in the crates.io project
 - [ ] **(LAST)** upload on `crates.io`
 
 # say in readme :
