@@ -43,7 +43,7 @@
 - [x] **(LAST)** do the thing to choose file in the crates.io project
 - [x] **(LAST)** upload on `crates.io`
 
-
+- [ ] add keybinds and feature to the README.md
 - [ ] **(LAST)** change version to v1.1.0 and do the cargo publish thing
 
 # say in readme :
