@@ -11,7 +11,7 @@
     <img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat&logo=open-source-initiative&logoColor=white" />
     <img src="https://hackatime-badge.hackclub.com/U0B8A3MPYKH/rilo" />
     <br />
-    A code editor in the terminal
+    A code editor in the terminal (in 1400 lines of code)
 </p>
 
 ## Why does rilo even exist ( °ヮ° ) ?

@@ -31,9 +31,9 @@
 - [x] auto-indent
     - [x] search in `~/.rilorc`
 
-- [ ] make the editor about 1000 lines of code
+- [x] make the editor about 1000 lines of code
 
-- [ ] Do a `// TODO` check
+- [x] Do a `// TODO` check
 
 - [ ] **(LAST)** change version to v1.0.0
 - [ ] **(LAST)** create a github release
