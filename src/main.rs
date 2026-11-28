@@ -836,6 +836,7 @@ impl EditorConfig {
 
     fn config_path() -> io::Result<PathBuf> {
         let home = env::var_os("HOME")
+            .or_else(|| env::var_os("USERPROFILE"))
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME not set"))?;
         Ok(PathBuf::from(home).join(".rilorc"))
     }
