@@ -43,6 +43,9 @@
 - [x] **(LAST)** do the thing to choose file in the crates.io project
 - [x] **(LAST)** upload on `crates.io`
 
+
+- [ ] **(LAST)** change version to v1.1.0 and do the cargo publish thing
+
 # say in readme :
 
 func :
