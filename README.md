@@ -155,6 +155,8 @@ rilo            # empty buffer, Ctrl-S to save as..
 
 I used AI only to generate `test` code in C, Python and Rust, to test the highlighting of the syntax. All generated code are in the [`test/`](https://github.com/wirenux/rilo/tree/main/test) folder.
 
+And when i was stuck on understanding complexe C code.
+
 Everything else is built on my own.
 
 ### Credits
